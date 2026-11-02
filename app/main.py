@@ -304,17 +304,25 @@ def auto_lineup(request: Request, tid: int, week: int, db: Session = Depends(get
 
 
 @app.post("/team/ir")
-def ir_action(request: Request, player_id: int = Form(...), action: str = Form(...), db: Session = Depends(get_db),
-              user: User = Depends(current_user)):
+def ir_action(request: Request, player_id: int = Form(...), action: str = Form(...), drop_id: str = Form(""),
+              db: Session = Depends(get_db), user: User = Depends(current_user)):
     league = get_league(db)
     if not user.team:
         raise LeagueError("You don't have a team.")
     p = db.get(Player, player_id)
+    wants_json = "application/json" in request.headers.get("accept", "")
     if action == "ir":
         roster.move_to_ir(db, league, user.team, player_id)
         msg = f"{p.name} moved to IR."
     elif action == "activate":
-        roster.activate_from_ir(db, league, user.team, player_id)
+        try:
+            roster.activate_from_ir(db, league, user.team, player_id, int(drop_id) if drop_id else None)
+        except roster.RosterFull:
+            db.rollback()
+            room = f"/make-room?pid={player_id}&action=activate"
+            if wants_json:
+                return JSONResponse({"ok": False, "need_drop": True, "url": room})
+            return redirect(room)
         msg = f"{p.name} activated."
     else:
         raise LeagueError("Unknown action.")
@@ -323,6 +331,22 @@ def ir_action(request: Request, player_id: int = Form(...), action: str = Form(.
         return JSONResponse({"ok": True})
     flash(request, msg)
     return redirect(_back(request, f"/team/{user.team.id}"))
+
+
+@app.get("/make-room", response_class=HTMLResponse)
+def make_room(request: Request, pid: int, action: str = "add", db: Session = Depends(get_db),
+              user: User = Depends(current_user)):
+    league = get_league(db)
+    if not user.team:
+        raise LeagueError("You don't have a team.")
+    incoming = db.get(Player, pid)
+    if not incoming or action not in ("add", "activate"):
+        raise LeagueError("Player not found.")
+    mine = lineups.roster_players(db, user.team.id)
+    savg = season_avgs(db, league, [p.id for p in mine + [incoming]])
+    claim = action == "add" and bool(roster.waiver_until(db, pid))
+    return render(request, "make_room.html", db, user, nav="team", incoming=incoming, mine=mine, savg=savg,
+                  action=action, claim=claim)
 
 
 @app.post("/team/drop")
@@ -459,12 +483,16 @@ def add_player(request: Request, pid: int, drop_id: str = Form(""), db: Session 
         raise LeagueError("You don't have a team.")
     drop_pid = int(drop_id) if drop_id else None
     p = db.get(Player, pid)
-    if roster.waiver_until(db, pid):
-        roster.submit_claim(db, league, user.team, pid, drop_pid)
-        flash(request, f"Claim submitted for {p.name}.")
-        db.commit()
-        return redirect("/claims")
-    roster.add_free_agent(db, league, user.team, pid, drop_pid)
+    try:
+        if roster.waiver_until(db, pid):
+            roster.submit_claim(db, league, user.team, pid, drop_pid)
+            flash(request, f"Claim submitted for {p.name}.")
+            db.commit()
+            return redirect("/claims")
+        roster.add_free_agent(db, league, user.team, pid, drop_pid)
+    except roster.RosterFull:
+        db.rollback()
+        return redirect(f"/make-room?pid={pid}&action=add")
     db.commit()
     flash(request, f"Added {p.name}.")
     return redirect(f"/team/{user.team.id}")

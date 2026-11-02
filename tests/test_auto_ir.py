@@ -151,3 +151,42 @@ def test_add_missing_columns(tmp_path):
     with eng.connect() as conn:
         assert conn.execute(text("SELECT injury FROM players")).scalar() == ""
         assert "on_ir" in {c["name"] for c in inspect(eng).get_columns("roster_spots")}
+
+
+def test_make_room_flow(db, league8):
+    lg = league8
+    t1 = drafted(db, lg)
+    c = TestClient(app)
+    c.post("/login", data={"username": "user1", "password": "pw"})
+    fa = db.scalar(select(Player).where(Player.id.not_in(select(RosterSpot.player_id))).order_by(Player.rank))
+    # full roster: Add sends you to the make-room page
+    r = c.post(f"/players/{fa.id}/add", follow_redirects=False)
+    assert r.headers["location"] == f"/make-room?pid={fa.id}&action=add"
+    page = c.get(r.headers["location"]).text
+    assert "Make room" in page and "DROP" in page and fa.name in page
+    victim = lineups.roster_players(db, t1.id)[-1]
+    r = c.post(f"/players/{fa.id}/add", data={"drop_id": victim.id}, follow_redirects=True)
+    assert f"Added {fa.name}" in r.text
+    db.expire_all()
+    assert roster.owner_id(db, fa.id) == t1.id and roster.owner_id(db, victim.id) is None
+
+    # IR activation with a full roster
+    hurt = lineups.roster_players(db, t1.id)[2]
+    hurt.injury = "OUT"
+    db.commit()
+    roster.move_to_ir(db, lg, t1, hurt.id)
+    from app.models import WaiverHold
+    fa2 = db.scalar(select(Player).where(Player.id.not_in(select(RosterSpot.player_id)),
+                                         Player.id.not_in(select(WaiverHold.player_id))).order_by(Player.rank))
+    roster.add_free_agent(db, lg, t1, fa2.id)
+    hurt.injury = ""
+    db.commit()
+    j = c.post("/team/ir", data={"player_id": hurt.id, "action": "activate"}, headers={"Accept": "application/json"}).json()
+    assert j["need_drop"] and "action=activate" in j["url"]
+    assert "Activating" in c.get(j["url"]).text
+    out = lineups.roster_players(db, t1.id)[-1]
+    r = c.post("/team/ir", data={"player_id": hurt.id, "action": "activate", "drop_id": out.id}, follow_redirects=True)
+    assert "activated" in r.text
+    db.expire_all()
+    assert roster.roster_count(db, t1.id) == config.ROSTER_MAX and not lineups.ir_players(db, t1.id)
+    assert roster.owner_id(db, out.id) is None

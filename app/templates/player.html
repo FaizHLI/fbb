@@ -37,14 +37,8 @@
   {% elif owner %}
     <a class="btn block" href="/trades/new?with_team={{ owner.id }}">Trade for {{ p.name }}</a>
   {% elif p.active %}
-    <form method="post" action="/players/{{ p.id }}/add" class="card">
-      <label class="field"><span>Drop{% if not full %} (optional){% endif %}</span>
-        <select name="drop_id" {{ 'required' if full }}>
-          <option value="">{{ 'Choose a player' if full else 'Nobody' }}</option>
-          {% for r in my_roster %}<option value="{{ r.id }}">{{ r.name }} · {{ r.positions|replace(',', '/') }}</option>{% endfor %}
-        </select>
-      </label>
-      <button class="btn primary block" type="submit">{{ 'Claim' if waiver else 'Add' }}</button>
+    <form method="post" action="/players/{{ p.id }}/add">
+      <button class="btn primary block" type="submit">{{ 'Claim' if waiver else 'Add' }}{% if full %} (pick a drop next){% endif %}</button>
     </form>
   {% endif %}
 {% endif %}

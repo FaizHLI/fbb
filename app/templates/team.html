@@ -205,7 +205,9 @@
     var m = e.target.closest('[data-move]'), h = e.target.closest('[data-here]'), a = e.target.closest('[data-activate]');
     if (a) {
       e.preventDefault();
-      post('/team/ir', {player_id: a.dataset.activate, action: 'activate'}).then(function () { location.reload(); });
+      post('/team/ir', {player_id: a.dataset.activate, action: 'activate'}).then(function (j) {
+        if (j && j.need_drop) location.href = j.url; else location.reload();
+      });
       return;
     }
     if (h && JSON.parse(h.dataset.here) === 'ir') {

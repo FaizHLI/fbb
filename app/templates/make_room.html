@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar with context %}
+{% block heading %}Make room{% endblock %}
+{% block sub %}<div class="sub">Roster full · pick a player to drop</div>{% endblock %}
+{% block content %}
+<div class="section-title">{{ 'Activating' if action == 'activate' else 'Claiming' if claim else 'Adding' }}</div>
+<div class="card flush">
+  <div class="lu-row">
+    <span class="slotlbl" style="background:var(--accent);color:var(--accent-ink)">+</span>
+    <span class="who">{{ avatar(incoming.id, incoming.name, incoming.nba_team) }}
+      <span class="txt"><div class="nm ellip">{{ incoming.name }}{% if incoming.injury %}<span class="inj inj-{{ incoming.injury|lower }}">{{ incoming.injury }}</span>{% endif %}</div>
+      <div class="mt">{{ incoming.nba_team }} · {{ incoming.positions|replace(',', '/') }}</div></span></span>
+    <div class="num"><b>{{ savg[incoming.id][1] if savg.get(incoming.id) else '-' }}</b><span>avg</span></div>
+  </div>
+</div>
+<div class="section-title">Drop</div>
+<div class="card flush">
+  {% for p in mine %}
+  <form method="post" class="lu-row" style="margin:0"
+        action="{{ '/team/ir' if action == 'activate' else '/players/%d/add' % incoming.id }}"
+        onsubmit="return confirm('Drop {{ p.name|e }} and {{ 'activate' if action == 'activate' else 'claim' if claim else 'add' }} {{ incoming.name|e }}?')">
+    {% if action == 'activate' %}<input type="hidden" name="player_id" value="{{ incoming.id }}"><input type="hidden" name="action" value="activate">{% endif %}
+    <input type="hidden" name="drop_id" value="{{ p.id }}">
+    <span class="who">{{ avatar(p.id, p.name, p.nba_team) }}
+      <span class="txt"><div class="nm ellip">{{ p.name }}{% if p.injury %}<span class="inj inj-{{ p.injury|lower }}">{{ p.injury }}</span>{% endif %}</div>
+      <div class="mt">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></span></span>
+    <div class="num"><b>{{ savg[p.id][1] if savg.get(p.id) else '-' }}</b><span>avg</span></div>
+    <div class="act"><button class="mv-btn" type="submit" style="color:var(--loss)">DROP</button></div>
+  </form>
+  {% endfor %}
+</div>
+<a class="btn block" href="javascript:history.back()">Cancel</a>
+{% endblock %}

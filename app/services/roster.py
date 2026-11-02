@@ -51,14 +51,24 @@ def move_to_ir(db: Session, league: League, team: Team, player_id: int) -> None:
     db.flush()
 
 
-def activate_from_ir(db: Session, league: League, team: Team, player_id: int) -> None:
+class RosterFull(LeagueError):
+    """Raised when a move needs an open roster spot; the UI offers a drop."""
+
+
+def activate_from_ir(db: Session, league: League, team: Team, player_id: int, drop_id: int | None = None) -> None:
     _require_moves_open(league)
     spot = db.scalar(select(RosterSpot).where(RosterSpot.player_id == player_id, RosterSpot.team_id == team.id,
                                               RosterSpot.on_ir.is_(True)))
     if not spot:
         raise LeagueError("That player isn't on your IR.")
+    if drop_id:
+        drop_spot = db.scalar(select(RosterSpot).where(RosterSpot.player_id == drop_id, RosterSpot.team_id == team.id))
+        if not drop_spot or drop_spot.on_ir:
+            raise LeagueError("Pick a player on your active roster to drop.")
+        dropped = _drop(db, league, team, drop_id, utcnow())
+        log(db, "drop", f"{team.name} dropped {dropped.name}")
     if roster_count(db, team.id) >= config.ROSTER_MAX:
-        raise LeagueError("Your roster is full. Drop someone to activate him.")
+        raise RosterFull("Your roster is full. Drop someone to activate him.")
     spot.on_ir = False
     log(db, "ir", f"{team.name} activated {spot.player.name} from IR")
     db.flush()
@@ -113,7 +123,7 @@ def add_free_agent(db: Session, league: League, team: Team, player_id: int, drop
     require_clean_ir(db, team)
     dropped = _drop(db, league, team, drop_id, now) if drop_id else None
     if roster_count(db, team.id) >= config.ROSTER_MAX:
-        raise LeagueError("Your roster is full. Pick someone to drop (not an IR player).")
+        raise RosterFull("Your roster is full. Pick someone to drop (not an IR player).")
     _add(db, team, player, now)
     db.execute(delete(WaiverHold).where(WaiverHold.player_id == player_id))
     log(db, "add", f"{team.name} added {player.name}" + (f", dropped {dropped.name}" if dropped else ""))
@@ -130,7 +140,7 @@ def submit_claim(db: Session, league: League, team: Team, player_id: int, drop_i
         raise LeagueError("The player you'd drop isn't on your roster.")
     require_clean_ir(db, team)
     if roster_count(db, team.id) >= config.ROSTER_MAX and not drop_id:
-        raise LeagueError("Your roster is full. Pick someone to drop.")
+        raise RosterFull("Your roster is full. Pick someone to drop.")
     dup = db.scalar(select(WaiverClaim).where(WaiverClaim.team_id == team.id, WaiverClaim.add_player_id == player_id,
                                               WaiverClaim.status == "pending"))
     if dup:
