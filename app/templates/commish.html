@@ -6,6 +6,8 @@
   <div class="spread"><span class="muted">Season</span><span>{{ league.season }} · starts {{ league.start_date.strftime('%b %-d') }}</span></div>
   <div class="spread"><span class="muted">Weeks</span><span>{{ league.regular_season_weeks }} + {{ league.playoff_teams }}-team playoffs</span></div>
   <div class="spread"><span class="muted">Players</span><span>{{ n_players }} · {{ provider }}</span></div>
+  <div class="spread"><span class="muted">Players synced</span><span>{{ (league.last_player_sync|local).strftime('%b %-d %-I:%M %p') if league.last_player_sync else 'never' }}</span></div>
+  <div class="spread"><span class="muted">Injured</span><span>{{ injured_out }} OUT · {{ injured_dtd }} DTD{% if unmatched %} · {{ unmatched }} unmatched{% endif %}</span></div>
   <div class="spread"><span class="muted">Stats synced</span><span>{{ (league.last_stats_sync|local).strftime('%b %-d %-I:%M %p') if league.last_stats_sync else 'never' }}</span></div>
 </div>
 <form method="post" action="/commish/sync"><button class="btn block" type="submit">Sync now</button></form>

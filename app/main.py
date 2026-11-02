@@ -669,7 +669,11 @@ def commish_page(request: Request, db: Session = Depends(get_db), user: User = D
     open_weeks = sorted(set(db.scalars(select(Matchup.week).where(Matchup.final.is_(False)))))
     pending = list(db.scalars(select(Trade).where(Trade.status == "pending")))
     finalized = bool(db.scalar(select(Matchup).where(Matchup.final.is_(True)).limit(1)))
+    injured_out = db.scalar(select(func.count(Player.id)).where(Player.active.is_(True), Player.injury == "OUT")) or 0
+    injured_dtd = db.scalar(select(func.count(Player.id)).where(Player.active.is_(True), Player.injury == "DTD")) or 0
+    unmatched = db.scalar(select(func.count(Player.id)).where(Player.id < 0)) or 0
     return render(request, "commish.html", db, user, nav="more", teams=teams, n_players=n_players, finalized=finalized,
+                  injured_out=injured_out, injured_dtd=injured_dtd, unmatched=unmatched,
                   open_weeks=open_weeks, pending=pending, provider=config.STATS_PROVIDER)
 
 

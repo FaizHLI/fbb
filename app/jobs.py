@@ -147,8 +147,12 @@ def tick(provider=None, log=print) -> None:
             log("no league yet; nothing to do")
             return
         provider = provider or get_provider()
-        if not league.last_player_sync or utcnow() - league.last_player_sync > timedelta(hours=6):
-            log(f"players: {sync_players(db, league, provider)}")
+        if not league.last_player_sync or utcnow() - league.last_player_sync > timedelta(minutes=50):
+            n = sync_players(db, league, provider)
+            injured = {}
+            for p in db.scalars(select(Player).where(Player.active.is_(True), Player.injury != "")):
+                injured[p.injury] = injured.get(p.injury, 0) + 1
+            log(f"players: {n}; injury statuses: {injured or 'none'}")
             db.commit()
         if league.status in ("season", "playoffs"):
             try:
