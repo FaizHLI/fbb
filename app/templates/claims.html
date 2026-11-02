@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block heading %}Waiver claims{% endblock %}
+{% block content %}
+<div class="card flush">
+  {% for c in claims %}
+  <div class="pl">
+    <div class="info">
+      <div class="name ellip">+ {{ c.add_player.name }}{% if c.drop_player %} <span class="muted">/ - {{ c.drop_player.name }}</span>{% endif %}</div>
+      <div class="meta">{% if c.status == 'pending' and holds.get(c.add_player_id) %}Clears {{ (holds[c.add_player_id]|local).strftime('%a %-I:%M %p') }} ET{% else %}{{ c.status|capitalize }}{% if c.note %} · {{ c.note }}{% endif %}{% endif %}</div>
+    </div>
+    {% if c.status == 'pending' %}
+    <form method="post" action="/claims/{{ c.id }}/cancel" class="inline"><button class="btn sm" type="submit">Cancel</button></form>
+    {% endif %}
+  </div>
+  {% else %}<div class="empty">No claims</div>{% endfor %}
+</div>
+<div class="section-title">Waiver order</div>
+<div class="card flush list">
+  {% for t in order %}<div><span class="slotlbl">{{ loop.index }}</span><span class="grow ellip" style="{{ 'font-weight:700' if me and t.id == me.id }}">{{ t.name }}</span></div>{% endfor %}
+</div>
+{% endblock %}

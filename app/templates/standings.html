@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block heading %}League{% endblock %}
+{% block content %}
+<div class="seg">
+  <a href="/standings" class="on">Standings</a><a href="/power">Power</a><a href="/scoreboard">Scores</a>
+</div>
+
+{% if rounds %}
+<div class="section-title">Playoffs</div>
+<div class="card scroll-x">
+  <div class="bracket">
+    {% for rnd, ms in rounds.items() %}
+    <div class="rd">
+      <div class="tiny muted">{{ 'Final' if loop.last and ms|length == 1 else 'Round %d' % rnd }}</div>
+      {% for m in ms %}
+      <a class="bm" href="/matchup/{{ m.id }}">
+        <div class="{{ 'w' if m.winner_team_id == m.home_team_id }}"><span class="ellip">({{ seeds[m.home_team_id] }}) {{ tmap[m.home_team_id].name }}</span><span class="num">{{ '%.1f' % m.home_score if m.final else '' }}</span></div>
+        <div class="{{ 'w' if m.winner_team_id == m.away_team_id }}"><span class="ellip">({{ seeds[m.away_team_id] }}) {{ tmap[m.away_team_id].name }}</span><span class="num">{{ '%.1f' % m.away_score if m.final else '' }}</span></div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="card flush">
+  <table class="tbl">
+    <tr><th></th><th>Team</th><th class="n">W-L</th><th class="n">PF</th><th class="n">PA</th></tr>
+    {% for s in table %}
+    <tr class="{{ 'cut' if loop.index0 == league.playoff_teams }}">
+      <td class="muted n" style="width:24px">{{ s.seed }}</td>
+      <td class="t"><a class="ellip" style="display:block;{{ 'font-weight:700' if me and s.team.id == me.id }}" href="/team/{{ s.team.id }}">{{ s.team.name }}</a></td>
+      <td class="n">{{ s.record }}</td>
+      <td class="n">{{ '%.1f' % s.pf }}</td>
+      <td class="n muted">{{ '%.1f' % s.pa }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

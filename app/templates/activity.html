@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block heading %}Activity{% endblock %}
+{% block content %}
+<div class="card flush">
+  {% for t in items %}
+  <div class="pl" style="align-items:flex-start">
+    <span class="pill" style="flex:none;margin-top:2px">{{ t.kind }}</span>
+    <div class="info"><div class="small">{{ t.text }}</div><div class="tiny muted">{{ (t.created_at|local).strftime('%b %-d, %-I:%M %p') }}</div></div>
+  </div>
+  {% else %}<div class="empty">Nothing yet</div>{% endfor %}
+</div>
+{% endblock %}

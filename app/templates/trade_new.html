@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block heading %}Trade{% endblock %}
+{% block sub %}<div class="sub ellip">with {{ other.name }}</div>{% endblock %}
+{% block content %}
+<form method="post" action="/trades">
+  <input type="hidden" name="with_team" value="{{ other.id }}">
+  <div class="section-title">You send</div>
+  <div class="card flush">
+    {% for p in mine %}
+    <label class="pl"><input type="checkbox" name="give" value="{{ p.id }}" style="width:22px;height:22px;accent-color:var(--accent)">
+      <div class="info"><div class="name ellip">{{ p.name }}</div><div class="meta">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></div>
+      <div class="stat"><b>{{ savg[p.id][1] if savg.get(p.id) else '-' }}</b><span>avg</span></div></label>
+    {% endfor %}
+  </div>
+  <div class="section-title">You get</div>
+  <div class="card flush">
+    {% for p in theirs %}
+    <label class="pl"><input type="checkbox" name="get" value="{{ p.id }}" style="width:22px;height:22px;accent-color:var(--accent)">
+      <div class="info"><div class="name ellip">{{ p.name }}</div><div class="meta">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></div>
+      <div class="stat"><b>{{ savg[p.id][1] if savg.get(p.id) else '-' }}</b><span>avg</span></div></label>
+    {% endfor %}
+  </div>
+  <label class="field"><span>Note (optional)</span><input type="text" name="note" maxlength="200"></label>
+  <button class="btn primary block" type="submit">Send offer</button>
+</form>
+{% endblock %}

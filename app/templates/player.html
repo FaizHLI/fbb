@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block heading %}{{ p.name }}{% endblock %}
+{% block sub %}<div class="sub">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}{% if p.rank %} · #{{ p.rank }}{% endif %}</div>{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="spread">
+    <div><div class="tiny muted">Season</div><div class="score" style="font-size:24px;font-weight:800">{{ savg[1] if savg else '-' }}</div><div class="tiny muted">{{ savg[0] if savg else 0 }}G</div></div>
+    <div class="right"><div class="tiny muted">Last 14D</div><div class="score" style="font-size:24px;font-weight:800">{{ ravg[1] if ravg else '-' }}</div><div class="tiny muted">{{ ravg[0] if ravg else 0 }}G</div></div>
+    <div class="right"><div class="tiny muted">Status</div>
+      <div style="font-weight:700;margin-top:4px">{% if owner %}<a href="/team/{{ owner.id }}">{{ owner.name }}</a>{% elif waiver %}<span class="loss">Waivers</span>{% else %}<span class="win">Free agent</span>{% endif %}</div>
+      {% if waiver and not owner %}<div class="tiny muted">until {{ (waiver|local).strftime('%a %-I:%M %p') }} ET</div>{% endif %}
+    </div>
+  </div>
+</div>
+
+{% if me and league.status in ('season', 'playoffs') %}
+  {% if owner and owner.id == me.id %}
+    <form method="post" action="/team/drop" onsubmit="return confirm('Drop {{ p.name|e }}?')">
+      <input type="hidden" name="player_id" value="{{ p.id }}">
+      <button class="btn danger block" type="submit">Drop</button>
+    </form>
+  {% elif owner %}
+    <a class="btn block" href="/trades/new?with_team={{ owner.id }}">Trade for {{ p.name }}</a>
+  {% elif p.active %}
+    <form method="post" action="/players/{{ p.id }}/add" class="card">
+      <label class="field"><span>Drop{% if not full %} (optional){% endif %}</span>
+        <select name="drop_id" {{ 'required' if full }}>
+          <option value="">{{ 'Choose a player' if full else 'Nobody' }}</option>
+          {% for r in my_roster %}<option value="{{ r.id }}">{{ r.name }} · {{ r.positions|replace(',', '/') }}</option>{% endfor %}
+        </select>
+      </label>
+      <button class="btn primary block" type="submit">{{ 'Claim' if waiver else 'Add' }}</button>
+    </form>
+  {% endif %}
+{% endif %}
+
+<div class="section-title">Game log</div>
+<div class="card flush scroll-x">
+  <table class="tbl">
+    <tr><th>Date</th><th class="n">FPTS</th><th class="n">PTS</th><th class="n">REB</th><th class="n">AST</th><th class="n">S</th><th class="n">B</th><th class="n">TO</th></tr>
+    {% for g in games %}
+    <tr><td>{{ g.game_date.strftime('%-m/%-d') }}</td><td class="n"><b>{{ '%.0f' % fpts(g) }}</b></td><td class="n">{{ g.pts }}</td><td class="n">{{ g.reb }}</td><td class="n">{{ g.ast }}</td><td class="n">{{ g.stl }}</td><td class="n">{{ g.blk }}</td><td class="n">{{ g.tov }}</td></tr>
+    {% else %}<tr><td colspan="8" class="empty">No games</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% from "_macros.html" import matchup_card, weekbar with context %}
+{% block heading %}Scoreboard{% endblock %}
+{% block content %}
+<div class="seg">
+  <a href="/standings">Standings</a><a href="/power">Power</a><a href="/scoreboard" class="on">Scores</a>
+</div>
+{{ weekbar('/scoreboard?', week, total, label) }}
+{% for c in cards %}{{ matchup_card(c) }}{% else %}<div class="empty">No matchups</div>{% endfor %}
+{% endblock %}

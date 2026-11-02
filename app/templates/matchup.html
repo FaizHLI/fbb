@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_macros.html" import matchup_card with context %}
+{% block heading %}Matchup{% endblock %}
+{% block sub %}<div class="sub">{{ label }}</div>{% endblock %}
+{% block content %}
+{{ matchup_card({'m': m, 'home': home, 'away': away, 'hs': hs, 'as': as_, 'wp': wp, 'live': not m.final}, big=true, link=false) }}
+<div class="card flush">
+  <div class="vs">
+    <div class="small muted" style="border-top:0"><a href="/team/{{ home.id }}?week={{ m.week }}" class="ellip" style="display:block">{{ home.name }}</a></div>
+    <div class="slot" style="border-top:0"></div>
+    <div class="small muted a" style="border-top:0"><a href="/team/{{ away.id }}?week={{ m.week }}" class="ellip" style="display:block">{{ away.name }}</a></div>
+    {% for h, a in rows %}
+      <div>
+        {% if h.player_id %}
+        <a href="/players/{{ h.player_id }}" class="pname ellip" style="display:block">{{ h.name }}</a>
+        <div class="row"><span class="pavg">{{ '%.1f' % h.avg }}</span><span class="pmeta">{{ h.games }}G</span></div>
+        {% else %}<span class="muted small">Empty</span>{% endif %}
+      </div>
+      <div class="slot">{{ h.slot }}</div>
+      <div class="a">
+        {% if a.player_id %}
+        <a href="/players/{{ a.player_id }}" class="pname ellip" style="display:block">{{ a.name }}</a>
+        <div class="row"><span class="pmeta">{{ a.games }}G</span><span class="pavg">{{ '%.1f' % a.avg }}</span></div>
+        {% else %}<span class="muted small">Empty</span>{% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

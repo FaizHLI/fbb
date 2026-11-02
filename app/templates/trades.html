@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block heading %}Trades{% endblock %}
+{% block content %}
+{% if me and league.status in ('season','playoffs') %}
+<form method="get" action="/trades/new" class="row" style="margin-bottom:12px">
+  <select name="with_team" class="grow" aria-label="Team" required>
+    <option value="">Trade with…</option>
+    {% for t in teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+  </select>
+  <button class="btn primary" type="submit">Go</button>
+</form>
+{% endif %}
+{% for t in items %}
+<div class="card">
+  <div class="spread small" style="margin-bottom:8px">
+    <span class="muted">{{ (t.created_at|local).strftime('%b %-d') }}</span>
+    <span class="pill {{ 'acc' if t.status == 'pending' }}">{{ t.status }}</span>
+  </div>
+  {% for side in [t.proposer, t.receiver] %}
+  <div style="margin-bottom:6px">
+    <div class="tiny muted">{{ side.name }} gets</div>
+    {% for i in t.items if i.from_team_id != side.id %}<div class="small">{{ i.player.name }}</div>{% else %}<div class="small muted">-</div>{% endfor %}
+  </div>
+  {% endfor %}
+  {% if t.note %}<div class="tiny muted">"{{ t.note }}"</div>{% endif %}
+  {% if t.status == 'pending' %}
+  <div class="btns" style="margin-top:10px">
+    {% if me and t.receiver_team_id == me.id %}
+      <form method="post" action="/trades/{{ t.id }}/reject" class="inline" style="flex:1"><button class="btn block">Reject</button></form>
+      <form method="post" action="/trades/{{ t.id }}/accept" class="inline" style="flex:1" onsubmit="return confirm('Accept trade?')"><button class="btn primary block">Accept</button></form>
+    {% elif me and t.proposer_team_id == me.id %}
+      <form method="post" action="/trades/{{ t.id }}/cancel" class="inline" style="flex:1"><button class="btn block">Cancel</button></form>
+    {% endif %}
+    {% if user.is_commish %}
+      <form method="post" action="/trades/{{ t.id }}/veto" class="inline" style="flex:1" onsubmit="return confirm('Veto?')"><button class="btn danger block">Veto</button></form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% else %}<div class="empty">No trades</div>{% endfor %}
+{% endblock %}

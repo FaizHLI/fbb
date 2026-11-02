@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "_macros.html" import matchup_card with context %}
+{% block content %}
+{% if league.status == 'setup' %}
+  <div class="card hero">
+    <div class="muted small">Draft</div>
+    <div class="big">Not started</div>
+    <a class="btn block" href="/draft">Draft room</a>
+  </div>
+{% elif league.status == 'drafting' %}
+  <a class="card hero" href="/draft" style="display:block">
+    <span class="pill live">Live</span>
+    <div class="big">Draft</div>
+    <span class="btn primary block">Enter draft room</span>
+  </a>
+{% else %}
+  <div class="section-title">{{ label }}</div>
+  {% if mine %}{{ matchup_card(mine, big=true) }}{% endif %}
+  {% if me and next_week and locked %}
+    <a class="card item spread" href="/team/{{ me.id }}?week={{ next_week }}">
+      <span>Set Week {{ next_week }} lineup</span><span class="chev">›</span>
+    </a>
+  {% endif %}
+  {% if others %}<div class="section-title">Scoreboard</div>{% endif %}
+  {% for c in others %}{{ matchup_card(c) }}{% endfor %}
+{% endif %}
+{% endblock %}

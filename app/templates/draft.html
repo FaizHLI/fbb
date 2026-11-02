@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block heading %}Draft{% endblock %}
+{% block content %}
+{% if league.status == 'setup' %}
+  <div class="section-title">Order</div>
+  <div class="card flush list">
+    {% for t in order %}<div><span class="slotlbl">{{ t.draft_slot or '-' }}</span><span class="grow ellip">{{ t.name }}</span></div>{% endfor %}
+  </div>
+  {% if user.is_commish %}<a class="btn block" href="/commish">Commissioner</a>{% endif %}
+{% else %}
+  <div id="state" hx-get="/draft/state" hx-trigger="every 2s, picked from:body" hx-swap="innerHTML">
+    {% include "_draft_state.html" %}
+  </div>
+
+  <div class="seg" id="tabs">
+    <a href="#" data-tab="pool" class="on">Players</a>
+    <a href="#" data-tab="board">Board</a>
+    <a href="#" data-tab="mine">My team</a>
+  </div>
+
+  <div data-pane="pool">
+    <form id="pf" hx-get="/draft/players" hx-target="#plist" hx-trigger="input changed delay:300ms from:#dq, change, refresh">
+      <input id="dq" type="search" name="q" placeholder="Search" autocomplete="off" style="margin-bottom:10px">
+      <input type="hidden" name="pos" id="dpos" value="">
+    </form>
+    <div class="chips" id="poschips">
+      <a class="chip on" href="#" data-pos="">All</a>
+      {% for p in positions %}<a class="chip" href="#" data-pos="{{ p }}">{{ p }}</a>{% endfor %}
+    </div>
+    <div id="plist" hx-get="/draft/players" hx-trigger="load" hx-include="#pf"></div>
+  </div>
+
+  <div data-pane="board" class="hide" id="board">{% include "_draft_board.html" %}</div>
+
+  <div data-pane="mine" class="hide">
+    <div class="card flush">
+      {% for p in mine %}
+      <div class="pl"><div class="info"><div class="name ellip">{{ p.name }}</div><div class="meta">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></div></div>
+      {% else %}<div class="empty small">No picks yet</div>{% endfor %}
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var tabs = document.getElementById('tabs');
+  if (!tabs) return;
+  tabs.addEventListener('click', function (e) {
+    var a = e.target.closest('a'); if (!a) return; e.preventDefault();
+    tabs.querySelectorAll('a').forEach(function (x) { x.classList.toggle('on', x === a); });
+    document.querySelectorAll('[data-pane]').forEach(function (p) { p.classList.toggle('hide', p.dataset.pane !== a.dataset.tab); });
+    if (a.dataset.tab === 'mine' || a.dataset.tab === 'board') location.hash = a.dataset.tab;
+  });
+  if (location.hash) { var t = tabs.querySelector('[data-tab="' + location.hash.slice(1) + '"]'); if (t) t.click(); }
+  document.getElementById('poschips').addEventListener('click', function (e) {
+    var a = e.target.closest('a'); if (!a) return; e.preventDefault();
+    this.querySelectorAll('a').forEach(function (x) { x.classList.toggle('on', x === a); });
+    document.getElementById('dpos').value = a.dataset.pos;
+    htmx.trigger('#pf', 'refresh');
+  });
+  // Refresh the player pool and board whenever the pick number changes.
+  var last = null;
+  document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.target.id !== 'state') return;
+    var n = document.getElementById('picknum');
+    if (!n) return;
+    if (n.dataset.status !== 'drafting') { location.reload(); return; }
+    if (last !== null && last !== n.dataset.n) {
+      htmx.trigger('#pf', 'refresh');
+      htmx.ajax('GET', '/draft/board', {target: '#board', swap: 'innerHTML'});
+    }
+    last = n.dataset.n;
+  });
+  // Local countdown between polls.
+  setInterval(function () {
+    var t = document.getElementById('timer'); if (!t || !t.dataset.left) return;
+    var s = Math.max(0, parseInt(t.dataset.left, 10) - 1); t.dataset.left = s;
+    t.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }, 1000);
+})();
+</script>
+{% endblock %}

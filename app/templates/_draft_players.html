@@ -1,0 +1,14 @@
+<div class="card flush">
+  {% for p in players %}
+  <div class="pl">
+    <span class="tiny muted" style="width:26px;text-align:right;flex:none">{{ p.rank or '' }}</span>
+    <div class="info"><div class="name ellip">{{ p.name }}</div><div class="meta">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></div>
+    {% if live %}
+    <form class="inline" hx-post="/draft/pick" hx-swap="none" hx-confirm="Draft {{ p.name|e }}?">
+      <input type="hidden" name="player_id" value="{{ p.id }}">
+      <button class="btn primary sm pickbtn" type="submit" {{ '' if my_turn else 'style=display:none' }}>Draft</button>
+    </form>
+    {% endif %}
+  </div>
+  {% else %}<div class="empty">No players</div>{% endfor %}
+</div>

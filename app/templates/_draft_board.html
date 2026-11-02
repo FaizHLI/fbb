@@ -1,0 +1,11 @@
+<div class="card flush">
+  {% set ns = namespace(r=0) %}
+  {% for pk in board %}
+    {% if pk.round != ns.r %}{% set ns.r = pk.round %}<div class="board-round">Round {{ pk.round }}</div>{% endif %}
+    <div class="pl" style="min-height:44px">
+      <span class="tiny muted" style="width:26px;text-align:right;flex:none">{{ pk.overall }}</span>
+      <div class="info"><div class="name ellip {{ 'muted' if not pk.player }}">{{ pk.player.name if pk.player else '-' }}</div>
+        <div class="meta ellip">{{ pk.team.name }}{% if pk.auto %} · auto{% endif %}</div></div>
+    </div>
+  {% endfor %}
+</div>

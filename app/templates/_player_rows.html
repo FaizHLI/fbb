@@ -1,0 +1,23 @@
+<div class="card flush">
+  <div class="pl tiny muted" style="min-height:0;padding-top:8px;padding-bottom:8px">
+    <span class="grow">Player</span><span class="stat" style="min-width:44px">Avg</span><span class="stat" style="min-width:44px">14D</span>
+  </div>
+  {% for p in players %}
+  <a class="pl" href="/players/{{ p.id }}">
+    <div class="info">
+      <div class="name ellip">{{ p.name }}</div>
+      <div class="meta ellip">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}
+        {% if own.get(p.id) %} · <span>{{ tmap[own[p.id]].name }}</span>
+        {% elif waivers.get(p.id) %} · <span class="loss">W</span>{% else %} · <span class="win">FA</span>{% endif %}</div>
+    </div>
+    <div class="stat"><b>{{ savg[p.id][1] if savg.get(p.id) else '-' }}</b><span>{{ savg[p.id][0] if savg.get(p.id) else 0 }}G</span></div>
+    <div class="stat"><b>{{ ravg[p.id][1] if ravg.get(p.id) else '-' }}</b><span>{{ ravg[p.id][0] if ravg.get(p.id) else 0 }}G</span></div>
+  </a>
+  {% else %}<div class="empty">No players</div>{% endfor %}
+</div>
+{% if more or page > 1 %}
+<div class="btns">
+  {% if page > 1 %}<a class="btn" href="/players?q={{ q|urlencode }}&pos={{ pos }}&status={{ status }}&sort={{ sort }}&page={{ page - 1 }}">Prev</a>{% endif %}
+  {% if more %}<a class="btn" href="/players?q={{ q|urlencode }}&pos={{ pos }}&status={{ status }}&sort={{ sort }}&page={{ page + 1 }}">Next</a>{% endif %}
+</div>
+{% endif %}

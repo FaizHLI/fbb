@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block heading %}Commissioner{% endblock %}
+{% block content %}
+<div class="card small">
+  <div class="spread"><span class="muted">Status</span><b>{{ league.status }}</b></div>
+  <div class="spread"><span class="muted">Season</span><span>{{ league.season }} · starts {{ league.start_date.strftime('%b %-d') }}</span></div>
+  <div class="spread"><span class="muted">Weeks</span><span>{{ league.regular_season_weeks }} + {{ league.playoff_teams }}-team playoffs</span></div>
+  <div class="spread"><span class="muted">Players</span><span>{{ n_players }} · {{ provider }}</span></div>
+  <div class="spread"><span class="muted">Stats synced</span><span>{{ (league.last_stats_sync|local).strftime('%b %-d %-I:%M %p') if league.last_stats_sync else 'never' }}</span></div>
+</div>
+<form method="post" action="/commish/sync"><button class="btn block" type="submit">Sync now</button></form>
+
+{% if league.status == 'setup' and not teams %}
+  <div class="section-title">Import from ESPN</div>
+  <form method="post" action="/commish/import" class="card">
+    <label class="field"><span>Teams (CSV: name,abbrev,manager)</span>
+      <textarea name="teams" rows="6" placeholder="name,abbrev,manager&#10;Team One,ONE,&#10;Team Two,TWO," required></textarea></label>
+    <label class="field"><span>Draft recap (copy the whole ESPN recap page)</span>
+      <textarea name="draft" rows="8" required></textarea></label>
+    <label class="field"><span>Your team's abbreviation</span><input type="text" name="commish" autocapitalize="characters" required></label>
+    <button class="btn primary block" type="submit">Import</button>
+  </form>
+  <div class="section-title">Or add teams and draft here</div>
+{% endif %}
+{% if league.status == 'setup' %}
+  <div class="section-title">Teams {{ teams|length }}/{{ league.num_teams }} · draft order</div>
+  <div class="card flush">
+    {% for t in teams %}
+    <div class="pl">
+      <span class="slotlbl">{{ t.draft_slot or '-' }}</span>
+      <div class="info"><div class="name ellip">{{ t.name }}</div><div class="meta">{{ t.user.username if t.user }}</div></div>
+      <form method="post" action="/commish/move-order" class="inline"><input type="hidden" name="team_id" value="{{ t.id }}"><input type="hidden" name="dir" value="-1"><button class="btn sm" aria-label="Up">↑</button></form>
+      <form method="post" action="/commish/move-order" class="inline"><input type="hidden" name="team_id" value="{{ t.id }}"><input type="hidden" name="dir" value="1"><button class="btn sm" aria-label="Down">↓</button></form>
+    </div>
+    {% endfor %}
+  </div>
+  <form method="post" action="/commish/randomize-order"><button class="btn block" type="submit">Randomize order</button></form>
+
+  {% if teams|length < league.num_teams %}
+  <div class="section-title">Add team</div>
+  <form method="post" action="/commish/add-team" class="card">
+    <label class="field"><span>Team name</span><input type="text" name="team" required></label>
+    {% if not me %}<label class="check small"><input type="checkbox" name="mine" value="1"> This is my team</label>{% endif %}
+    <label class="field"><span>Username (not needed for your own team)</span><input type="text" name="username" autocapitalize="none"></label>
+    <label class="field"><span>Password</span><input type="text" name="password"></label>
+    <button class="btn block" type="submit">Add</button>
+  </form>
+  {% endif %}
+
+  <div class="section-title">Draft</div>
+  <form method="post" action="/commish/timer" class="card row">
+    <label class="grow"><span class="tiny muted">Seconds per pick (0 = off)</span><input type="number" name="seconds" value="{{ league.draft_timer_seconds }}" min="0" inputmode="numeric"></label>
+    <button class="btn" type="submit" style="align-self:flex-end">Save</button>
+  </form>
+  <form method="post" action="/commish/start-draft" onsubmit="return confirm('Start the draft?')">
+    <button class="btn primary block" type="submit" {{ 'disabled' if teams|length < league.num_teams }}>Start draft</button>
+  </form>
+{% elif league.status == 'drafting' %}
+  <div class="section-title">Draft</div>
+  <form method="post" action="/commish/timer" class="card row">
+    <label class="grow"><span class="tiny muted">Seconds per pick (0 = off)</span><input type="number" name="seconds" value="{{ league.draft_timer_seconds }}" min="0" inputmode="numeric"></label>
+    <button class="btn" type="submit" style="align-self:flex-end">Save</button>
+  </form>
+  <form method="post" action="/commish/undo-pick" onsubmit="return confirm('Undo last pick?')"><button class="btn danger block" type="submit">Undo last pick</button></form>
+{% else %}
+  {% if pending %}<a class="card item spread" href="/trades"><span>Pending trades</span><span class="pill acc">{{ pending|length }}</span></a>{% endif %}
+  <div class="section-title">Weeks</div>
+  <form method="post" action="/commish/finalize" class="card row" onsubmit="return confirm('Finalize this week now?')">
+    <select name="week" class="grow" aria-label="Week">{% for w in open_weeks %}<option value="{{ w }}">Week {{ w }}</option>{% endfor %}</select>
+    <button class="btn" type="submit" {{ 'disabled' if not open_weeks }}>Finalize</button>
+  </form>
+  <form method="post" action="/commish/process-waivers" onsubmit="return confirm('Process all pending claims now?')"><button class="btn block" type="submit">Process waivers now</button></form>
+{% endif %}
+
+<div class="section-title">Reset a password</div>
+<form method="post" action="/commish/reset-password" class="card">
+  <label class="field"><span>Team</span><select name="team_id">{% for t in teams %}<option value="{{ t.id }}">{{ t.name }} ({{ t.user.username if t.user }})</option>{% endfor %}</select></label>
+  <label class="field"><span>New password</span><input type="text" name="password" minlength="4" autocapitalize="none" required></label>
+  <button class="btn block" type="submit">Reset</button>
+</form>
+{% endblock %}

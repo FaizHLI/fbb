@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block sub %}{% endblock %}
+{% block content %}
+<div class="card" style="margin-top:24px">
+  <form method="post" action="/login">
+    <label class="field"><span>Username</span><input type="text" name="username" autocomplete="username" autocapitalize="none" required></label>
+    <label class="field"><span>Password</span><input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="btn primary block" type="submit">Log in</button>
+  </form>
+</div>
+{% endblock %}

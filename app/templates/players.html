@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block heading %}Players{% endblock %}
+{% block content %}
+<form hx-get="/players" hx-target="#rows" hx-trigger="input changed delay:300ms from:#q, change" hx-push-url="true" action="/players">
+  <input id="q" type="search" name="q" value="{{ q }}" placeholder="Search" autocomplete="off" style="margin-bottom:10px">
+  <input type="hidden" name="pos" value="{{ pos }}">
+  <div class="row" style="margin-bottom:10px">
+    <select name="status" class="grow" aria-label="Status">
+      <option value="fa" {{ 'selected' if status=='fa' }}>Available</option>
+      <option value="all" {{ 'selected' if status=='all' }}>All players</option>
+    </select>
+    <select name="sort" class="grow" aria-label="Sort">
+      <option value="rank" {{ 'selected' if sort=='rank' }}>Rank</option>
+      <option value="avg" {{ 'selected' if sort=='avg' }}>Season avg</option>
+      <option value="recent" {{ 'selected' if sort=='recent' }}>Last 14 days</option>
+    </select>
+  </div>
+</form>
+<div class="chips">
+  <a class="chip {{ 'on' if not pos }}" href="/players?q={{ q|urlencode }}&status={{ status }}&sort={{ sort }}">All</a>
+  {% for p in positions %}
+  <a class="chip {{ 'on' if pos==p }}" href="/players?q={{ q|urlencode }}&pos={{ p }}&status={{ status }}&sort={{ sort }}">{{ p }}</a>
+  {% endfor %}
+</div>
+<div id="rows">{% include "_player_rows.html" %}</div>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_macros.html" import weekbar with context %}
+{% block heading %}{{ team.name }}{% endblock %}
+{% block sub %}<div class="sub">{{ team.user.username if team.user }}</div>{% endblock %}
+{% block topright %}
+  {% if me and me.id != team.id and league.status in ('season','playoffs') %}
+    <a class="btn sm" href="/trades/new?with_team={{ team.id }}">Trade</a>
+  {% endif %}
+{% endblock %}
+{% block content %}
+{% if week %}
+  {{ weekbar('/team/%d?' % team.id, week, total, label) }}
+  <div class="card spread">
+    <span class="muted small">{% if locked %}Score{% else %}Lineup open{% endif %}</span>
+    {% if locked %}<span class="score" style="font-size:24px;font-weight:800">{{ '%.1f' % score }}</span>
+    {% else %}<span class="pill acc">Edit</span>{% endif %}
+  </div>
+
+  {% if editable %}
+  <form method="post" action="/team/{{ team.id }}/lineup/{{ week }}">
+    <div class="card flush">
+      {% for slot in SLOTS %}{% set i = loop.index0 %}
+      <div class="pl">
+        <span class="slotlbl">{{ slot }}</span>
+        <select name="slot{{ i }}" class="grow" aria-label="{{ slot }}">
+          <option value="">Empty</option>
+          {% for p in options[i] %}
+            <option value="{{ p.id }}" {{ 'selected' if lineup.get(i) == p.id }}>{{ p.name }} · {{ p.positions|replace(',', '/') }}{% if savg.get(p.id) %} · {{ savg[p.id][1] }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endfor %}
+    </div>
+    <label class="check small muted"><input type="checkbox" name="apply_rest" value="1"> Use for all later weeks</label>
+    <button class="btn primary block" type="submit">Save lineup</button>
+  </form>
+  {% else %}
+  <div class="card flush">
+    {% for r in rows %}
+    <div class="pl">
+      <span class="slotlbl">{{ r.slot }}</span>
+      {% if r.player_id %}
+      <a class="info" href="/players/{{ r.player_id }}"><div class="name ellip">{{ r.name }}</div>
+        <div class="meta">{{ r.nba_team }}{% if r.game_scores %} · {{ r.game_scores|map('round', 0)|map('int')|join(', ') }}{% endif %}</div></a>
+      <div class="stat"><b>{{ '%.1f' % r.avg }}</b><span>{{ r.games }}G</span></div>
+      {% else %}<span class="info muted">Empty</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="section-title spread"><span>Bench</span><span>{{ players|length }}/{{ ROSTER_MAX }}</span></div>
+  <div class="card flush">
+    {% for p in bench %}
+    <a class="pl" href="/players/{{ p.id }}">
+      <span class="slotlbl">BN</span>
+      <div class="info"><div class="name ellip">{{ p.name }}</div><div class="meta">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></div>
+      <div class="stat"><b>{{ savg[p.id][1] if savg.get(p.id) else '-' }}</b><span>avg</span></div>
+    </a>
+    {% else %}<div class="empty small">Empty</div>{% endfor %}
+  </div>
+{% else %}
+  <div class="card flush">
+    {% for p in players %}
+    <a class="pl" href="/players/{{ p.id }}">
+      <div class="info"><div class="name ellip">{{ p.name }}</div><div class="meta">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></div>
+      <div class="stat"><b>{{ p.rank or '-' }}</b><span>rank</span></div>
+    </a>
+    {% else %}<div class="empty">No players yet</div>{% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block heading %}League{% endblock %}
+{% block content %}
+<div class="seg">
+  <a href="/standings">Standings</a><a href="/power" class="on">Power</a><a href="/scoreboard">Scores</a>
+</div>
+{% if through %}
+<div class="section-title">Through week {{ through }}</div>
+<div class="card flush">
+  {% for r in rows %}
+  <a class="pr" href="/team/{{ r.team.id }}">
+    <span class="rk">{{ r.rank }}</span>
+    <span class="mv {{ 'win' if r.move > 0 else 'loss' if r.move < 0 else 'muted' }}">
+      {% if r.move > 0 %}▲{{ r.move }}{% elif r.move < 0 %}▼{{ -r.move }}{% else %}-{% endif %}</span>
+    <div class="grow">
+      <div class="spread"><span class="ellip" style="font-weight:700">{{ r.team.name }}</span><span class="num" style="font-weight:700">{{ '%.1f' % r.score }}</span></div>
+      <div class="meter"><i style="width:{{ r.score }}%"></i></div>
+      <div class="grid"><span>{{ r.record }}</span><span>AP {{ r.all_play }}</span><span>Avg {{ '%.1f' % r.avg_score }}</span><span>L3 {{ '%.1f' % r.last3 }}</span></div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+<div class="tiny muted" style="padding:0 4px">40% all-play · 30% record · 30% last 3 weeks</div>
+{% else %}
+<div class="empty">After week 1</div>
+{% endif %}
+{% endblock %}

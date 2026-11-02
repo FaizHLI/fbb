@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="{{ league.name if league else 'Hoops' }}">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<title>{% block title %}{{ league.name if league else 'Hoops' }}{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css?v=1">
+<script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="spread">
+    <div class="grow">
+      <h1 class="ellip">{% block heading %}{{ league.name if league else 'Hoops' }}{% endblock %}</h1>
+      {% block sub %}{% if me %}<div class="sub ellip">{{ me.name }}</div>{% endif %}{% endblock %}
+    </div>
+    {% block topright %}{% endblock %}
+  </div>
+</header>
+<main>
+  {% for kind, msg in flashes %}<div class="flash {{ kind }}">{{ msg }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+{% if user %}
+<nav class="nav">
+  <a href="/" class="{{ 'on' if nav=='home' }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+  {% if league and league.status == 'drafting' %}
+  <a href="/draft" class="{{ 'on' if nav=='draft' }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Draft</a>
+  {% else %}
+  <a href="{{ '/team/%d' % me.id if me else '/more' }}" class="{{ 'on' if nav=='team' }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Team</a>
+  {% endif %}
+  <a href="/players" class="{{ 'on' if nav=='players' }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Players</a>
+  <a href="/standings" class="{{ 'on' if nav=='league' }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 20V10M12 20V4M18 20v-7"/></svg>League</a>
+  <a href="/more" class="{{ 'on' if nav=='more' }}">
+    {% if pending_trades %}<span class="badge">{{ pending_trades }}</span>{% endif %}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>More</a>
+</nav>
+{% endif %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

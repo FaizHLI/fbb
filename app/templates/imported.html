@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block heading %}Imported{% endblock %}
+{% block content %}
+<div class="flash ok">Save these now. They are only shown once.</div>
+<div class="card flush">
+  <table class="tbl">
+    <tr><th>Team</th><th>User</th><th>Password</th></tr>
+    {% for team, u, pw, c in logins %}
+    <tr><td class="t"><span class="ellip" style="display:block">{{ team }}</span></td><td>{{ u }}</td><td style="font-family:ui-monospace,monospace;white-space:nowrap">{{ pw }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% if placeholders %}
+<div class="card small"><div class="muted" style="margin-bottom:6px">Not matched yet ({{ placeholders|length }}). They link on the next player sync.</div>{{ placeholders|join(', ') }}</div>
+{% endif %}
+<a class="btn primary block" href="/">Done</a>
+{% endblock %}

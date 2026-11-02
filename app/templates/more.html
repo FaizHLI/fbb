@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block heading %}More{% endblock %}
+{% block content %}
+<div class="card flush list">
+  <a href="/trades" class="spread"><span>Trades</span><span class="row">{% if pending_trades %}<span class="pill live">{{ pending_trades }}</span>{% endif %}<span class="chev">›</span></span></a>
+  <a href="/claims" class="spread"><span>Waiver claims</span><span class="chev">›</span></a>
+  <a href="/draft" class="spread"><span>Draft</span><span class="chev">›</span></a>
+  <a href="/activity" class="spread"><span>Activity</span><span class="chev">›</span></a>
+  {% if user.is_commish %}<a href="/commish" class="spread"><span>Commissioner</span><span class="chev">›</span></a>{% endif %}
+</div>
+<div class="section-title">Teams</div>
+<div class="card flush list">
+  {% for t in teams %}<a href="/team/{{ t.id }}" class="spread"><span class="ellip">{{ t.name }}</span><span class="chev">›</span></a>{% endfor %}
+</div>
+<form method="post" action="/logout"><button class="btn block" type="submit">Log out</button></form>
+{% endblock %}

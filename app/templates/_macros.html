@@ -1,0 +1,31 @@
+{% macro matchup_card(c, big=false, link=true) -%}
+{% set m = c.m %}
+{% set hl = c.hs >= c['as'] %}
+<{{ 'a href=/matchup/%d' % m.id if link else 'div' }} class="card mu {{ 'big' if big }}">
+  <div class="spread small" style="margin-bottom:6px">
+    <span class="muted">{% if m.is_playoff %}{{ 'Final' if m.playoff_round == (league.playoff_teams|log2) else 'Playoffs' }}{% else %}Week {{ m.week }}{% endif %}</span>
+    {% if m.final %}<span class="pill final">Final</span>{% elif c.live %}<span class="pill live">Live</span>{% endif %}
+  </div>
+  <div class="side {{ 'lead' if hl else 'trail' }}">
+    <span class="team ellip">{{ c.home.name }}</span>
+    <span class="score">{{ '%.1f' % c.hs }}</span>
+  </div>
+  <div class="side {{ 'trail' if hl else 'lead' }}">
+    <span class="team ellip">{{ c.away.name }}</span>
+    <span class="score">{{ '%.1f' % c['as'] }}</span>
+  </div>
+  <div class="wp">
+    <div class="bar"><i style="width:{{ c.wp.home }}%"></i><i style="width:{{ c.wp.away }}%"></i></div>
+    <div class="lbls"><span>{{ c.wp.home|int }}%{% if not m.final %} · proj {{ '%.1f' % c.wp.home_proj }}{% endif %}</span>
+      <span>{% if not m.final %}proj {{ '%.1f' % c.wp.away_proj }} · {% endif %}{{ c.wp.away|int }}%</span></div>
+  </div>
+</{{ 'a' if link else 'div' }}>
+{%- endmacro %}
+
+{% macro weekbar(base, week, total, label) -%}
+<div class="weekbar">
+  <a class="btn" href="{{ base }}week={{ week - 1 }}" {% if week <= 1 %}style="visibility:hidden"{% endif %} aria-label="Previous week">‹</a>
+  <div class="lbl small">{{ label }}</div>
+  <a class="btn" href="{{ base }}week={{ week + 1 }}" {% if week >= total %}style="visibility:hidden"{% endif %} aria-label="Next week">›</a>
+</div>
+{%- endmacro %}
