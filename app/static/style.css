@@ -289,3 +289,32 @@ label.field span { display: block; font-size: 13px; color: var(--muted); margin-
 .inj-dtd { background: #d29922; color: #1a1200; }
 .lu-auto { display: flex; gap: 8px; margin-bottom: 12px; }
 .lu-auto .btn { flex: 1; }
+
+/* ---- player search ---- */
+.tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin: 0 -12px 10px; padding: 0 12px;
+  border-bottom: 1px solid var(--line); }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: none; padding: 10px 12px; font-size: 14px; font-weight: 700; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.tab.on { color: var(--text); border-bottom-color: var(--accent); }
+.filters { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-bottom: 12px; align-items: center; }
+.filters select { min-height: 40px; padding-top: 6px; padding-bottom: 6px; font-size: 15px; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 10px; border-radius: 12px;
+  background: var(--surface-2); border: 1px solid var(--line); font-size: 14px; font-weight: 600; cursor: pointer; }
+.toggle input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+.stat-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.stat-tbl { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+.stat-tbl th, .stat-tbl td { padding: 8px 9px; text-align: right; white-space: nowrap; border-top: 1px solid var(--line); }
+.stat-tbl thead th { border-top: 0; font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .04em; background: var(--surface-2); position: sticky; top: 0; }
+.stat-tbl th a { display: block; padding: 2px 0; }
+.stat-tbl th.on, .stat-tbl th.on a { color: var(--accent); }
+.stat-tbl td.on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.stat-tbl td.big { font-weight: 800; font-size: 15px; }
+.stat-tbl .pcol { position: sticky; left: 0; z-index: 1; text-align: left; background: var(--surface); width: 150px; min-width: 150px; max-width: 150px;
+  box-shadow: 1px 0 0 var(--line); }
+.stat-tbl thead .pcol { background: var(--surface-2); z-index: 2; }
+.prow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ptxt { min-width: 0; display: flex; flex-direction: column; }
+.pn { font-weight: 700; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (min-width: 560px) { .stat-tbl .pcol { width: 200px; min-width: 200px; max-width: 200px; } }
+@media (max-width: 360px) { .filters { grid-template-columns: 1fr 1fr; } .filters .toggle { grid-column: span 2; justify-content: center; } }

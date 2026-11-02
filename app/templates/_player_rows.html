@@ -1,25 +1,43 @@
 {% from "_macros.html" import avatar with context %}
-<div class="card flush">
-  <div class="pl tiny muted" style="min-height:0;padding-top:8px;padding-bottom:8px">
-    <span class="grow">Player</span><span class="stat" style="min-width:44px">Avg</span><span class="stat" style="min-width:44px">14D</span>
-  </div>
-  {% for p in players %}
-  <a class="pl" href="/players/{{ p.id }}">
-    {{ avatar(p.id, p.name, p.nba_team) }}
-    <div class="info">
-      <div class="name ellip">{{ p.name }}</div>
-      <div class="meta ellip">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}
-        {% if own.get(p.id) %} · <span>{{ tmap[own[p.id]].name }}</span>
-        {% elif waivers.get(p.id) %} · <span class="loss">W</span>{% else %} · <span class="win">FA</span>{% endif %}</div>
-    </div>
-    <div class="stat"><b>{{ savg[p.id][1] if savg.get(p.id) else '-' }}</b><span>{{ savg[p.id][0] if savg.get(p.id) else 0 }}G</span></div>
-    <div class="stat"><b>{{ ravg[p.id][1] if ravg.get(p.id) else '-' }}</b><span>{{ ravg[p.id][0] if ravg.get(p.id) else 0 }}G</span></div>
-  </a>
-  {% else %}<div class="empty">No players</div>{% endfor %}
+{% set proj = params.view == 'proj' %}
+{% if proj %}
+  {% set cols = [('avg', 'PROJ'), ('wk', 'WK'), ('left', 'LEFT'), ('gp', 'GP'), ('pts', 'PTS'), ('reb', 'REB'), ('ast', 'AST'), ('stl', 'STL'), ('blk', 'BLK'), ('tpm', '3PM'), ('tov', 'TO')] %}
+{% else %}
+  {% set cols = [('avg', 'FPTS'), ('fpts', 'TOT'), ('gp', 'GP'), ('min', 'MIN'), ('pts', 'PTS'), ('reb', 'REB'), ('ast', 'AST'), ('stl', 'STL'), ('blk', 'BLK'), ('tpm', '3PM'), ('tov', 'TO'), ('fg_pct', 'FG%'), ('ft_pct', 'FT%')] %}
+{% endif %}
+{% set sortable = ['avg', 'fpts', 'gp', 'min', 'pts', 'reb', 'ast', 'stl', 'blk', 'tpm', 'tov'] %}
+<div class="tiny muted" style="margin:0 4px 6px">{{ total }} players</div>
+<div class="card flush stat-wrap">
+  <table class="stat-tbl">
+    <thead><tr>
+      <th class="pcol">Player</th>
+      {% for k, label in cols %}
+      <th class="{{ 'on' if params.sort == k }}">{% if k in sortable %}<a href="{{ url(sort=k) }}">{{ label }}</a>{% else %}{{ label }}{% endif %}</th>
+      {% endfor %}
+    </tr></thead>
+    <tbody>
+    {% for p in players %}{% set ln = lines.get(p.id, {}) %}
+    <tr>
+      <td class="pcol"><a href="/players/{{ p.id }}" class="prow">
+        {{ avatar(p.id, p.name, p.nba_team, 'sm') }}
+        <span class="ptxt"><span class="pn">{{ p.name }}{% if p.injury %}<span class="inj inj-{{ p.injury|lower }}">{{ p.injury }}</span>{% endif %}</span>
+        <span class="pm">{{ p.nba_team }} {{ p.positions|replace(',', '/') }} ·
+          {% if own.get(p.id) %}{{ tmap[own[p.id]].abbrev or tmap[own[p.id]].name }}{% elif holds.get(p.id) %}<span class="loss">WA</span>{% else %}<span class="win">FA</span>{% endif %}</span></span>
+      </a></td>
+      {% for k, label in cols %}
+        {% set v = ln.get(k) %}
+        <td class="{{ 'on' if params.sort == k }}{{ ' big' if k == 'avg' }}">{% if v is none or (k != 'gp' and not ln.get('gp') and k not in ('avg', 'wk', 'left')) %}-{% elif k in ('gp', 'left', 'fpts') %}{{ v|round|int if v == v|round or k == 'fpts' else v }}{% else %}{{ v }}{% endif %}</td>
+      {% endfor %}
+    </tr>
+    {% else %}
+    <tr><td class="empty" colspan="{{ cols|length + 1 }}">No players</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
 </div>
 {% if more or page > 1 %}
 <div class="btns">
-  {% if page > 1 %}<a class="btn" href="/players?q={{ q|urlencode }}&pos={{ pos }}&status={{ status }}&sort={{ sort }}&page={{ page - 1 }}">Prev</a>{% endif %}
-  {% if more %}<a class="btn" href="/players?q={{ q|urlencode }}&pos={{ pos }}&status={{ status }}&sort={{ sort }}&page={{ page + 1 }}">Next</a>{% endif %}
+  {% if page > 1 %}<a class="btn" href="{{ url(page=page - 1) }}">Prev</a>{% endif %}
+  {% if more %}<a class="btn" href="{{ url(page=page + 1) }}">Next</a>{% endif %}
 </div>
 {% endif %}

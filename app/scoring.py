@@ -86,3 +86,37 @@ def player_avgs(db: Session, player_ids, start=None, end=None) -> dict[int, tupl
     for g in db.scalars(q):
         acc.setdefault(g.player_id, []).append(game_fpts(g))
     return {pid: (len(v), round(sum(v) / len(v), 1)) for pid, v in acc.items()}
+
+
+STAT_KEYS = ["pts", "reb", "ast", "stl", "blk", "tov", "tpm", "fgm", "fga", "ftm", "fta"]
+
+
+def stat_lines(db: Session, player_ids, start=None, end=None) -> dict[int, dict]:
+    """Per-player totals and per-game averages over a date range:
+    {"gp", "fpts" (total), "avg" (fpts per game), "min", and per-game pts/reb/ast/...}"""
+    ids = list(player_ids)
+    if not ids:
+        return {}
+    q = select(PlayerGame).where(PlayerGame.player_id.in_(ids))
+    if start:
+        q = q.where(PlayerGame.game_date >= start)
+    if end:
+        q = q.where(PlayerGame.game_date <= end)
+    acc: dict[int, dict] = {}
+    for g in db.scalars(q):
+        a = acc.setdefault(g.player_id, {"gp": 0, "fpts": 0.0, "min": 0.0, **{k: 0 for k in STAT_KEYS}})
+        a["gp"] += 1
+        a["fpts"] += game_fpts(g)
+        a["min"] += g.minutes or 0
+        for k in STAT_KEYS:
+            a[k] += getattr(g, k)
+    out = {}
+    for pid, a in acc.items():
+        n = a["gp"]
+        line = {"gp": n, "fpts": round(a["fpts"], 1), "avg": round(a["fpts"] / n, 1), "min": round(a["min"] / n, 1)}
+        for k in STAT_KEYS:
+            line[k] = round(a[k] / n, 1)
+        line["fg_pct"] = round(a["fgm"] / a["fga"] * 100, 1) if a["fga"] else 0.0
+        line["ft_pct"] = round(a["ftm"] / a["fta"] * 100, 1) if a["fta"] else 0.0
+        out[pid] = line
+    return out

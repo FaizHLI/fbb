@@ -1,26 +1,33 @@
 {% extends "base.html" %}
 {% block heading %}Players{% endblock %}
 {% block content %}
-<form hx-get="/players" hx-target="#rows" hx-trigger="input changed delay:300ms from:#q, change" hx-push-url="true" action="/players">
-  <input id="q" type="search" name="q" value="{{ q }}" placeholder="Search" autocomplete="off" style="margin-bottom:10px">
-  <input type="hidden" name="pos" value="{{ pos }}">
-  <div class="row" style="margin-bottom:10px">
-    <select name="status" class="grow" aria-label="Status">
-      <option value="fa" {{ 'selected' if status=='fa' }}>Available</option>
-      <option value="all" {{ 'selected' if status=='all' }}>All players</option>
+<form id="pf" action="/players" hx-get="/players" hx-target="#rows" hx-push-url="true"
+      hx-trigger="input changed delay:300ms from:#q, change">
+  <input id="q" type="search" name="q" value="{{ params.q }}" placeholder="Search players" autocomplete="off" style="margin-bottom:10px">
+  {% for k in ('pos', 'view', 'sort') %}<input type="hidden" name="{{ k }}" value="{{ params[k] }}">{% endfor %}
+
+  <div class="tabs" role="tablist">
+    {% for key, label in views %}
+    <a role="tab" class="tab {{ 'on' if params.view == key }}" href="{{ url(view=key, sort=('avg' if key == 'proj' else params.sort)) }}">{{ season_label if key == 'season' else label }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="chips">
+    <a class="chip {{ 'on' if not params.pos }}" href="{{ url(pos='') }}">All</a>
+    {% for p in positions %}<a class="chip {{ 'on' if params.pos == p }}" href="{{ url(pos=p) }}">{{ p }}</a>{% endfor %}
+  </div>
+
+  <div class="filters">
+    <select name="status" aria-label="Availability">
+      {% for v, l in [('fa', 'Available'), ('free', 'Free agents'), ('waivers', 'On waivers'), ('owned', 'On rosters'), ('all', 'All players')] %}
+      <option value="{{ v }}" {{ 'selected' if params.status == v }}>{{ l }}</option>{% endfor %}
     </select>
-    <select name="sort" class="grow" aria-label="Sort">
-      <option value="rank" {{ 'selected' if sort=='rank' }}>Rank</option>
-      <option value="avg" {{ 'selected' if sort=='avg' }}>Season avg</option>
-      <option value="recent" {{ 'selected' if sort=='recent' }}>Last 14 days</option>
+    <select name="team" aria-label="NBA team">
+      <option value="">All teams</option>
+      {% for t in nba_teams %}<option value="{{ t }}" {{ 'selected' if params.team == t }}>{{ t }}</option>{% endfor %}
     </select>
+    <label class="toggle"><input type="checkbox" name="healthy" value="1" {{ 'checked' if params.healthy }}><span>Healthy</span></label>
   </div>
 </form>
-<div class="chips">
-  <a class="chip {{ 'on' if not pos }}" href="/players?q={{ q|urlencode }}&status={{ status }}&sort={{ sort }}">All</a>
-  {% for p in positions %}
-  <a class="chip {{ 'on' if pos==p }}" href="/players?q={{ q|urlencode }}&pos={{ p }}&status={{ status }}&sort={{ sort }}">{{ p }}</a>
-  {% endfor %}
-</div>
 <div id="rows">{% include "_player_rows.html" %}</div>
 {% endblock %}

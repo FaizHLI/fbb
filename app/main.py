@@ -16,7 +16,7 @@ from . import config
 from .auth import check_password
 from .db import get_db, init_db, utcnow
 from .models import (DraftPick, League, Matchup, Player, PlayerGame, RosterSpot, Team, Trade,
-                     Transaction, User, WaiverClaim)
+                     Transaction, User, WaiverClaim, WaiverHold)
 from .scoring import game_fpts, player_avgs
 from .services import analytics, draft, lineups, roster, schedule, trades
 from .services.common import LeagueError, get_league
@@ -354,24 +354,78 @@ def _player_query(q: str, pos: str, status: str, own: dict[int, int]):
     return stmt.order_by(Player.rank.is_(None), Player.rank, Player.name)
 
 
+PLAYER_VIEWS = [("season", "Season"), ("l7", "Last 7"), ("l15", "Last 15"), ("l30", "Last 30"), ("proj", "Proj")]
+PLAYER_SORTS = [("avg", "FPTS/G"), ("fpts", "Total FPTS"), ("gp", "Games"), ("min", "Minutes"), ("pts", "Points"),
+                ("reb", "Rebounds"), ("ast", "Assists"), ("stl", "Steals"), ("blk", "Blocks"), ("tpm", "3PM"),
+                ("tov", "Turnovers (fewest)"), ("rank", "Rank")]
+NBA_TEAMS = sorted(ui.TEAM_COLORS)
+
+
 @app.get("/players", response_class=HTMLResponse)
-def players_page(request: Request, q: str = "", pos: str = "", status: str = "fa", sort: str = "rank",
-                 page: int = 1, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def players_page(request: Request, q: str = "", pos: str = "", status: str = "fa", view: str = "season",
+                 sort: str = "avg", team: str = "", healthy: str = "", page: int = 1,
+                 db: Session = Depends(get_db), user: User = Depends(current_user)):
+    from .scoring import stat_lines
+    from .services.projections import project
     league = get_league(db)
     own = owners(db)
-    found = list(db.scalars(_player_query(q, pos, status, own)))
+    stmt = select(Player).where(Player.active.is_(True))
+    if q:
+        stmt = stmt.where(Player.name.ilike(f"%{q.strip()}%"))
+    if pos in POSITIONS:
+        stmt = stmt.where(Player.positions.like(f"%{pos}%"))
+    if team in NBA_TEAMS:
+        stmt = stmt.where(Player.nba_team == team)
+    if healthy:
+        stmt = stmt.where(or_(Player.injury == "", Player.injury.is_(None)))
+    found = list(db.scalars(stmt.order_by(Player.rank.is_(None), Player.rank, Player.name)))
+    holds = {h.player_id: h.until for h in db.scalars(select(WaiverHold).where(WaiverHold.until > utcnow()))}
+    if status == "fa":        # free agents + waivers
+        found = [p for p in found if p.id not in own]
+    elif status == "free":    # free agents only
+        found = [p for p in found if p.id not in own and p.id not in holds]
+    elif status == "waivers":
+        found = [p for p in found if p.id not in own and p.id in holds]
+    elif status == "owned":
+        found = [p for p in found if p.id in own]
     ids = [p.id for p in found]
-    savg, ravg = season_avgs(db, league, ids), recent_avgs(db, ids)
-    if sort == "avg":
-        found.sort(key=lambda p: -savg.get(p.id, (0, -99))[1])
-    elif sort == "recent":
-        found.sort(key=lambda p: -ravg.get(p.id, (0, -99))[1])
+
+    today = today_local()
+    view = view if view in dict(PLAYER_VIEWS) else "season"
+    season_start = league.start_date - timedelta(days=21)
+    ranges = {"season": season_start, "l7": today - timedelta(days=7), "l15": today - timedelta(days=15),
+              "l30": today - timedelta(days=30)}
+    lines = stat_lines(db, ids, start=ranges.get(view, season_start))
+    proj = {}
+    if view == "proj":
+        wk = first_open_week(league) if league.status in ("season", "playoffs") else 1
+        proj = project(db, league, found, min(wk, total_weeks(league)))
+        season = stat_lines(db, ids, start=season_start)
+        lines = {pid: dict(season.get(pid, {"gp": 0}), avg=proj[pid].ppg, wk=proj[pid].expected,
+                           left=proj[pid].games_left) for pid in ids}
+
+    sort = sort if sort in dict(PLAYER_SORTS) else "avg"
+    if sort == "rank":
+        pass
+    elif sort == "tov":
+        found.sort(key=lambda p: (lines.get(p.id, {}).get("gp", 0) == 0, lines.get(p.id, {}).get("tov", 99)))
+    else:
+        found.sort(key=lambda p: -(lines.get(p.id, {}).get(sort) or -1))
+
     per = 40
     shown = found[(page - 1) * per: page * per]
-    waivers = {p.id: roster.waiver_until(db, p.id) for p in shown}
-    ctx = dict(nav="players", players=shown, q=q, pos=pos, status=status, sort=sort, page=page,
-               more=len(found) > page * per, savg=savg, ravg=ravg, own=own, tmap=team_map(db),
-               waivers=waivers, positions=POSITIONS)
+    params = {"q": q, "pos": pos, "status": status, "view": view, "sort": sort, "team": team, "healthy": healthy}
+
+    def url(**kw):
+        from urllib.parse import urlencode
+        merged = {**params, **kw}
+        if "page" not in kw:
+            merged.pop("page", None)
+        return "/players?" + urlencode({k: v for k, v in merged.items() if v not in ("", None)})
+
+    ctx = dict(nav="players", players=shown, page=page, more=len(found) > page * per, total=len(found),
+               lines=lines, own=own, tmap=team_map(db), holds=holds, positions=POSITIONS, params=params, url=url,
+               views=PLAYER_VIEWS, sorts=PLAYER_SORTS, nba_teams=NBA_TEAMS, season_label=league.season)
     if request.headers.get("HX-Request"):
         return render(request, "_player_rows.html", db, user, **ctx)
     return render(request, "players.html", db, user, **ctx)

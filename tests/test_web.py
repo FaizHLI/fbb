@@ -166,3 +166,31 @@ def test_commish_changes_start_date(db, league8):
     lg2 = db.scalar(select(League))
     assert str(lg2.start_date) == "2026-10-19" and lg2.regular_season_weeks == 22 and lg2.name == "New Name"
     assert db.scalar(select(func.count(Matchup.id))) == 22 * 4
+
+
+def test_player_search_views(db, league8):
+    from app.services import draft as d
+    lg = league8
+    d.set_draft_order(db, lg)
+    d.start_draft(db, lg)
+    while lg.status == "drafting":
+        pk = d.current_pick(db)
+        d.make_pick(db, lg, pk.team, d.best_available(db).id)
+    db.commit()
+    fake = FakeProvider()
+    set_now(f"{START + timedelta(days=10)}T20:00:00")
+    sync_stats(db, lg, days_back=30, provider=fake)
+    from app.jobs import sync_schedule
+    sync_schedule(db, lg, fake, back=30, ahead=10)
+    db.commit()
+    c = login("user1")
+    for view in ("season", "l7", "l15", "l30", "proj"):
+        for sort in ("avg", "fpts", "pts", "tov", "rank"):
+            html = ok(c, f"/players?view={view}&sort={sort}")
+            assert "stat-tbl" in html
+    html = ok(c, "/players?status=owned&team=BOS&healthy=1&pos=PG")
+    assert "players" in html
+    html = ok(c, "/players?view=proj")
+    assert "PROJ" in html and "LEFT" in html
+    r = c.get("/players?q=a&view=l7", headers={"HX-Request": "true"})
+    assert r.status_code == 200 and "<html" not in r.text and "stat-tbl" in r.text
