@@ -25,7 +25,8 @@ class FakeProvider:
         name = f"{FIRST[i % 20]} {LAST[(i * 7 + i // 20) % 20]}"
         if i >= 400:
             name += " Jr."
-        info = PlayerInfo(1000 + i, name, TEAMS[i % 30], POS[_h("pos", i) % len(POS)])
+        info = PlayerInfo(1000 + i, name, TEAMS[i % 30], POS[_h("pos", i) % len(POS)],
+                          "OUT" if i % 23 == 5 else "DTD" if i % 31 == 7 else "")
         skill = max(0.25, 1.6 - i / 160)  # lower index = better player
         return info, skill
 
@@ -62,6 +63,13 @@ class FakeProvider:
                     pts=2 * fgm + tpm + ftm, reb=max(0, int(r.gauss(5 * skill, 2))),
                     ast=max(0, int(r.gauss(4 * skill, 2))), stl=r.randint(0, 3), blk=r.randint(0, 2),
                     tov=r.randint(0, 4), fgm=fgm, fga=fga, ftm=ftm, fta=fta, tpm=tpm))
+            d += timedelta(days=1)
+        return out
+
+    def schedule(self, start: date, end: date) -> list[tuple[str, date, str]]:
+        out, d = [], start
+        while d <= end:
+            out += [(f"{d:%Y%m%d}-{t}", d, t) for t in TEAMS if self.plays_on(t, d)]
             d += timedelta(days=1)
         return out
 

@@ -31,6 +31,7 @@ def sync_players(db: Session, league: League, provider=None) -> int:
             p = Player(id=info.id, name=info.name)
             db.add(p)
         p.name, p.nba_team, p.positions, p.active = info.name, info.nba_team, ",".join(info.positions), True
+        p.injury = getattr(info, "injury", "") or ""
         seen.add(info.id)
     db.flush()
     from .importer import merge_placeholders
@@ -101,6 +102,26 @@ def sync_stats(db: Session, league: League, days_back: int = 3, provider=None) -
     return n
 
 
+def sync_schedule(db: Session, league: League, provider=None, back: int = 14, ahead: int = 14) -> int:
+    """NBA schedule around today, used for projections and win probability."""
+    provider = provider or get_provider()
+    if not hasattr(provider, "schedule"):
+        return 0
+    from .models import TeamGame
+    today = today_local()
+    rows = provider.schedule(today - timedelta(days=back), today + timedelta(days=ahead))
+    have = {(g.game_id, g.team) for g in db.scalars(select(TeamGame).where(
+        TeamGame.game_date >= today - timedelta(days=back), TeamGame.game_date <= today + timedelta(days=ahead)))}
+    n = 0
+    for gid, d, team in rows:
+        if (gid, team[:5]) not in have:
+            db.add(TeamGame(game_id=gid, game_date=d, team=team[:5]))
+            have.add((gid, team[:5]))
+            n += 1
+    db.flush()
+    return n
+
+
 def lock_lineups(db: Session, league: League) -> None:
     """Freeze this week's lineups so later roster moves can't change them."""
     if league.status not in ("season", "playoffs"):
@@ -126,10 +147,18 @@ def tick(provider=None, log=print) -> None:
             log("no league yet; nothing to do")
             return
         provider = provider or get_provider()
-        if not league.last_player_sync or utcnow() - league.last_player_sync > timedelta(hours=20):
+        if not league.last_player_sync or utcnow() - league.last_player_sync > timedelta(hours=6):
             log(f"players: {sync_players(db, league, provider)}")
             db.commit()
         if league.status in ("season", "playoffs"):
+            try:
+                wide = utcnow().hour in (9, 21)  # twice a day look further out
+                back = 30 if not league.last_stats_sync else (14 if wide else 2)
+                log(f"schedule rows: {sync_schedule(db, league, provider, back=back, ahead=14 if wide else 8)}")
+                db.commit()
+            except Exception as e:  # schedule is nice to have; never block scoring
+                db.rollback()
+                log(f"schedule sync failed: {e}")
             log(f"stat lines: {sync_stats(db, league, provider=provider)}")
             db.commit()
             lock_lineups(db, league)

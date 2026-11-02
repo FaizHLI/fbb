@@ -45,15 +45,19 @@ def accept(db: Session, league: League, team: Team, trade_id: int) -> None:
     for item in t.items:
         if owner_id(db, item.player_id) != item.from_team_id:
             raise LeagueError(f"{item.player.name} is no longer on that team. Reject this trade.")
+    from .roster import require_clean_ir
+    require_clean_ir(db, t.proposer)
+    require_clean_ir(db, t.receiver)
+    spots = {i.player_id: db.scalar(select(RosterSpot).where(RosterSpot.player_id == i.player_id)) for i in t.items}
     for team_id in (t.proposer_team_id, t.receiver_team_id):
-        out_n = sum(1 for i in t.items if i.from_team_id == team_id)
-        in_n = len(t.items) - out_n
-        if roster_count(db, team_id) - out_n + in_n > config.ROSTER_MAX:
+        out_active = sum(1 for i in t.items if i.from_team_id == team_id and not spots[i.player_id].on_ir)
+        in_n = sum(1 for i in t.items if i.from_team_id != team_id)
+        if roster_count(db, team_id) - out_active + in_n > config.ROSTER_MAX:
             raise LeagueError("A team would go over the roster limit. Drop someone first.")
     for item in t.items:
         to_team = t.receiver_team_id if item.from_team_id == t.proposer_team_id else t.proposer_team_id
-        spot = db.scalar(select(RosterSpot).where(RosterSpot.player_id == item.player_id))
-        spot.team_id, spot.acquired_at = to_team, utcnow()
+        spot = spots[item.player_id]
+        spot.team_id, spot.acquired_at, spot.on_ir = to_team, utcnow(), False
         remove_from_open_lineups(db, league, item.from_team_id, item.player_id)
     t.status, t.resolved_at = "accepted", utcnow()
     log(db, "trade", _summary(t))

@@ -16,7 +16,52 @@ def owner_id(db: Session, player_id: int) -> int | None:
 
 
 def roster_count(db: Session, team_id: int) -> int:
-    return len(list(db.scalars(select(RosterSpot.id).where(RosterSpot.team_id == team_id))))
+    """Players counting toward the roster limit (IR spots don't)."""
+    return len(list(db.scalars(select(RosterSpot.id).where(RosterSpot.team_id == team_id,
+                                                           RosterSpot.on_ir.is_(False)))))
+
+
+def healthy_on_ir(db: Session, team_id: int) -> list[Player]:
+    return [s.player for s in db.scalars(select(RosterSpot).where(RosterSpot.team_id == team_id,
+                                                                    RosterSpot.on_ir.is_(True)))
+            if not s.player.ir_eligible]
+
+
+def require_clean_ir(db: Session, team: Team) -> None:
+    bad = healthy_on_ir(db, team.id)
+    if bad:
+        raise LeagueError(f"{bad[0].name} is healthy but still on IR. Activate or drop him first.")
+
+
+def move_to_ir(db: Session, league: League, team: Team, player_id: int) -> None:
+    _require_moves_open(league)
+    spot = db.scalar(select(RosterSpot).where(RosterSpot.player_id == player_id, RosterSpot.team_id == team.id))
+    if not spot:
+        raise LeagueError("That player isn't on your roster.")
+    if spot.on_ir:
+        raise LeagueError(f"{spot.player.name} is already on IR.")
+    if not spot.player.ir_eligible:
+        raise LeagueError(f"Only players listed OUT can go on IR.")
+    used = len(list(db.scalars(select(RosterSpot.id).where(RosterSpot.team_id == team.id, RosterSpot.on_ir.is_(True)))))
+    if used >= config.IR_SLOTS:
+        raise LeagueError("Your IR spot is full.")
+    spot.on_ir = True
+    remove_from_open_lineups(db, league, team.id, player_id)
+    log(db, "ir", f"{team.name} moved {spot.player.name} to IR")
+    db.flush()
+
+
+def activate_from_ir(db: Session, league: League, team: Team, player_id: int) -> None:
+    _require_moves_open(league)
+    spot = db.scalar(select(RosterSpot).where(RosterSpot.player_id == player_id, RosterSpot.team_id == team.id,
+                                              RosterSpot.on_ir.is_(True)))
+    if not spot:
+        raise LeagueError("That player isn't on your IR.")
+    if roster_count(db, team.id) >= config.ROSTER_MAX:
+        raise LeagueError("Your roster is full. Drop someone to activate him.")
+    spot.on_ir = False
+    log(db, "ir", f"{team.name} activated {spot.player.name} from IR")
+    db.flush()
 
 
 def waiver_until(db: Session, player_id: int, now: datetime | None = None) -> datetime | None:
@@ -65,9 +110,10 @@ def add_free_agent(db: Session, league: League, team: Team, player_id: int, drop
         raise LeagueError(f"{player.name} is already on a team.")
     if waiver_until(db, player_id, now):
         raise LeagueError(f"{player.name} is on waivers. Put in a claim instead.")
-    if roster_count(db, team.id) >= config.ROSTER_MAX and not drop_id:
-        raise LeagueError("Your roster is full. Pick someone to drop.")
+    require_clean_ir(db, team)
     dropped = _drop(db, league, team, drop_id, now) if drop_id else None
+    if roster_count(db, team.id) >= config.ROSTER_MAX:
+        raise LeagueError("Your roster is full. Pick someone to drop (not an IR player).")
     _add(db, team, player, now)
     db.execute(delete(WaiverHold).where(WaiverHold.player_id == player_id))
     log(db, "add", f"{team.name} added {player.name}" + (f", dropped {dropped.name}" if dropped else ""))
@@ -82,6 +128,7 @@ def submit_claim(db: Session, league: League, team: Team, player_id: int, drop_i
         raise LeagueError(f"{player.name} is already on a team.")
     if drop_id and owner_id(db, drop_id) != team.id:
         raise LeagueError("The player you'd drop isn't on your roster.")
+    require_clean_ir(db, team)
     if roster_count(db, team.id) >= config.ROSTER_MAX and not drop_id:
         raise LeagueError("Your roster is full. Pick someone to drop.")
     dup = db.scalar(select(WaiverClaim).where(WaiverClaim.team_id == team.id, WaiverClaim.add_player_id == player_id,
@@ -130,6 +177,9 @@ def process_waivers(db: Session, league: League, now: datetime | None = None) ->
                 continue
             if c.drop_player_id and owner_id(db, c.drop_player_id) != c.team_id:
                 c.status, c.note = "failed", "Drop player no longer on roster"
+                continue
+            if healthy_on_ir(db, c.team_id):
+                c.status, c.note = "failed", "Healthy player on IR"
                 continue
             if not c.drop_player_id and roster_count(db, c.team_id) >= config.ROSTER_MAX:
                 c.status, c.note = "failed", "Roster full"

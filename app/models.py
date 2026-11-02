@@ -55,6 +55,11 @@ class Player(Base):
     positions: Mapped[str] = mapped_column(String(20), default="")  # "PG,SG"
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     rank: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # pre-draft rank
+    injury: Mapped[str] = mapped_column(String(10), default="")  # "", "DTD", "OUT", "SUSP"
+
+    @property
+    def ir_eligible(self) -> bool:
+        return self.injury == "OUT"
 
     @property
     def position_list(self) -> list[str]:
@@ -67,6 +72,7 @@ class RosterSpot(Base):
     team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), index=True)
     player_id: Mapped[int] = mapped_column(ForeignKey("players.id"), unique=True)
     acquired_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    on_ir: Mapped[bool] = mapped_column(Boolean, default=False)  # IR spots don't count toward the roster limit
     player: Mapped[Player] = relationship()
 
 
@@ -185,3 +191,13 @@ class Transaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     kind: Mapped[str] = mapped_column(String(20))
     text: Mapped[str] = mapped_column(String(300))
+
+
+class TeamGame(Base):
+    """NBA schedule: one row per team per game (past and upcoming)."""
+    __tablename__ = "team_games"
+    __table_args__ = (UniqueConstraint("game_id", "team"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[str] = mapped_column(String(30))
+    game_date: Mapped[date] = mapped_column(Date, index=True)
+    team: Mapped[str] = mapped_column(String(5), index=True)

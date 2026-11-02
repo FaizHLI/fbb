@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from . import config, db as dbmod
 from .cli import create_league, create_team
 from .db import Base, SessionLocal, engine, init_db
-from .jobs import lock_lineups, sync_players, sync_stats
+from .jobs import lock_lineups, sync_players, sync_schedule, sync_stats
 from .services import draft, roster, schedule
 from .stats.fake_provider import FakeProvider
 
@@ -48,6 +48,7 @@ def main(weeks_played: int = 5):
     dbmod.FAKE_NOW = datetime.combine(ws + timedelta(days=2), datetime.min.time()).replace(hour=23, tzinfo=config.LEAGUE_TZ)
     lock_lineups(db, lg)
     sync_stats(db, lg, days_back=3, provider=fake)
+    sync_schedule(db, lg, fake, back=60, ahead=14)
     db.commit()
     print(f"Demo ready. Set HOOPS_FAKE_NOW={dbmod.FAKE_NOW.isoformat()}")
     db.close()

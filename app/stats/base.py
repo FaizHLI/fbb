@@ -9,6 +9,7 @@ class PlayerInfo:
     name: str
     nba_team: str
     positions: list[str]  # subset of PG, SG, SF, PF, C
+    injury: str = ""      # "", "DTD", "OUT", "SUSP"
 
 
 @dataclass
@@ -61,6 +62,19 @@ def expand_positions(raw: str) -> list[str]:
                 out.append(m)
     order = ["PG", "SG", "SF", "PF", "C"]
     return sorted(out, key=order.index)
+
+
+def injury_code(status: str) -> str:
+    s = (status or "").lower()
+    if not s or s == "active":
+        return ""
+    if "suspen" in s:
+        return "SUSP"
+    if "day" in s or "questionable" in s or "probable" in s or "doubtful" in s:
+        return "DTD"
+    if "out" in s or "injur" in s or "reserve" in s:
+        return "OUT"
+    return ""
 
 
 def previous_season(season: str) -> str:

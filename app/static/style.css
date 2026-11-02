@@ -253,7 +253,7 @@ label.field span { display: block; font-size: 13px; color: var(--muted); margin-
 .lu-row .who { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
 .lu-row .who .txt { min-width: 0; }
 .lu-row .who .nm { font-weight: 700; font-size: 15px; }
-.lu-row .who .mt { font-size: 12px; color: var(--muted); }
+.lu-row .who .mt { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lu-row .num { text-align: right; min-width: 46px; font-variant-numeric: tabular-nums; }
 .lu-row .num b { display: block; font-size: 16px; }
 .lu-row .num span { font-size: 11px; color: var(--muted); }
@@ -282,3 +282,10 @@ label.field span { display: block; font-size: 13px; color: var(--muted); margin-
   .lu-row .who .av { display: none; }
   .lu-row .act { width: 56px; }
 }
+
+/* injury badges */
+.inj { display: inline-block; font-size: 10px; font-weight: 800; padding: 1px 5px; border-radius: 5px; vertical-align: 1px; margin-left: 4px; letter-spacing: .03em; }
+.inj-out, .inj-susp { background: var(--loss); color: #fff; }
+.inj-dtd { background: #d29922; color: #1a1200; }
+.lu-auto { display: flex; gap: 8px; margin-bottom: 12px; }
+.lu-auto .btn { flex: 1; }

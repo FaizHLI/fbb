@@ -17,8 +17,11 @@
   </div>
 
   {% if editable %}
+  <div class="lu-auto">
+    <button class="btn primary" id="auto-btn" type="button">Auto lineup</button>
+  </div>
   <div class="card flush" id="lu">
-    <div class="lu-head"><span style="width:42px">Slot</span><span class="grow">Player</span><span style="min-width:46px;text-align:right">Avg</span><span style="width:64px"></span></div>
+    <div class="lu-head"><span style="width:42px">Slot</span><span class="grow">Player</span><span style="min-width:46px;text-align:right">Proj</span><span style="width:64px"></span></div>
     <div id="lu-rows"></div>
   </div>
   <label class="check small muted"><input type="checkbox" id="apply-rest"> Also use for later weeks</label>
@@ -40,7 +43,7 @@
       <span class="slotlbl">{{ r.slot }}</span>
       {% if r.player_id %}
       <a class="who" href="/players/{{ r.player_id }}">{{ avatar(r.player_id, r.name, r.nba_team) }}
-        <span class="txt"><div class="nm ellip">{{ r.name }}</div>
+        <span class="txt"><div class="nm ellip">{{ r.name }}{% if inj.get(r.player_id) %}<span class="inj inj-{{ inj[r.player_id]|lower }}">{{ inj[r.player_id] }}</span>{% endif %}</div>
         <div class="mt ellip">{{ r.nba_team }}{% if r.game_scores %} · {{ r.game_scores|map('round', 0)|map('int')|join(', ') }}{% endif %}</div></span></a>
       <div class="num"><b>{{ '%.1f' % r.avg }}</b><span>{{ r.games }}G</span></div>
       {% else %}<span class="who empty-slot">Empty</span>{% endif %}
@@ -55,6 +58,16 @@
       <a class="who" href="/players/{{ p.id }}">{{ avatar(p.id, p.name, p.nba_team) }}
         <span class="txt"><div class="nm ellip">{{ p.name }}</div><div class="mt">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></span></a>
       <div class="num"><b>{{ savg[p.id][1] if savg.get(p.id) else '-' }}</b><span>{{ savg[p.id][0] if savg.get(p.id) else 0 }}G</span></div>
+    </div>
+    {% else %}<div class="empty small">Empty</div>{% endfor %}
+  </div>
+  <div class="section-title spread"><span>IR</span><span>{{ ir|length }}/{{ IR_SLOTS }}</span></div>
+  <div class="card flush">
+    {% for p in ir %}
+    <div class="lu-row">
+      <span class="slotlbl">IR</span>
+      <a class="who" href="/players/{{ p.id }}">{{ avatar(p.id, p.name, p.nba_team) }}
+        <span class="txt"><div class="nm ellip">{{ p.name }}{% if p.injury %}<span class="inj inj-{{ p.injury|lower }}">{{ p.injury }}</span>{% endif %}</div><div class="mt">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></span></a>
     </div>
     {% else %}<div class="empty small">Empty</div>{% endfor %}
   </div>
@@ -80,6 +93,9 @@
   var ELIG = {{ elig_json|tojson }};
   var ROSTER = {{ roster_json|tojson }};
   var lineup = {{ lineup_json|tojson }};
+  var IR = {{ ir_json|tojson }};
+  var IR_OPEN = {{ 'true' if ir_open else 'false' }};
+  var IR_SLOTS = {{ IR_SLOTS }};
   var URL_SAVE = "/team/{{ team.id }}/lineup/{{ week }}";
   var byId = {}; ROSTER.forEach(function (p) { byId[p.id] = p; });
   var moving = null;            // {pid, from: slot index or "bench"}
@@ -103,6 +119,7 @@
       return can(occ, from);               // occupant swaps into the slot we left
     }
     if (target === 'bench') return from !== 'bench';
+    if (target === 'ir') return IR_OPEN && byId[pid] && byId[pid].inj === 'OUT';
     if (target.bench) {                    // swap with a bench player
       return from !== 'bench' && can(target.bench, from);
     }
@@ -121,6 +138,12 @@
     }
   }
 
+  function badge(p) { return p.inj ? '<span class="inj inj-' + p.inj.toLowerCase() + '">' + p.inj + '</span>' : ''; }
+  function post(url, data) {
+    var fd = new FormData(); Object.keys(data).forEach(function (k) { fd.append(k, data[k]); });
+    return fetch(url, {method: 'POST', body: fd, headers: {'Accept': 'application/json'}, credentials: 'same-origin'})
+      .then(function (r) { return r.json().catch(function () { return {ok: r.ok}; }); });
+  }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function avatar(p) {
     return '<span class="av av-md" style="--tc:' + p.color + '">' + esc(p.ini) +
@@ -129,16 +152,16 @@
   function row(label, pid, key) {
     var p = pid != null ? byId[pid] : null;
     var isMoving = moving && moving.pid === pid && pid != null;
-    var tgt = key === 'empty-bench' ? 'bench' : (typeof key === 'number' ? key : {bench: pid});
+    var tgt = key === 'empty-bench' ? 'bench' : key === 'empty-ir' ? 'ir' : (typeof key === 'number' ? key : {bench: pid});
     var isTarget = moving && !isMoving && valid(tgt);
     var cls = 'lu-row' + (isMoving ? ' moving' : isTarget ? ' target' : (moving ? ' dim' : ''));
     var act = '';
     if (isTarget) act = '<button class="here-btn" data-here=\'' + JSON.stringify(tgt) + '\'>HERE</button>';
     else if (p && (!moving || isMoving)) act = '<button class="mv-btn" data-move="' + pid + '" data-from=\'' + JSON.stringify(key === 'bench' || typeof key !== 'number' ? 'bench' : key) + '\'>' + (isMoving ? 'CANCEL' : 'MOVE') + '</button>';
     var who = p
-      ? '<a class="who" href="/players/' + p.id + '">' + avatar(p) + '<span class="txt"><div class="nm ellip">' + esc(p.name) + '</div><div class="mt">' + esc(p.team) + ' · ' + p.pos.join('/') + '</div></span></a>' +
-        '<div class="num"><b>' + (p.avg != null ? p.avg.toFixed(1) : '-') + '</b><span>' + p.gp + 'G</span></div>'
-      : '<span class="who empty-slot">' + (key === 'empty-bench' ? 'Move to bench' : 'Empty') + '</span><div class="num"></div>';
+      ? '<a class="who" href="/players/' + p.id + '">' + avatar(p) + '<span class="txt"><div class="nm ellip">' + esc(p.name) + badge(p) + '</div><div class="mt">' + esc(p.team) + ' · ' + p.pos.join('/') + ' · ' + (p.avg != null ? p.avg.toFixed(1) + ' avg' : 'no games') + '</div></span></a>' +
+        '<div class="num"><b>' + p.proj.toFixed(1) + '</b><span>' + (p.known ? p.left + ' left' : p.gp + 'G') + '</span></div>'
+      : '<span class="who empty-slot">' + (key === 'empty-bench' ? 'Move to bench' : key === 'empty-ir' ? 'Move to IR' : 'Empty') + '</span><div class="num"></div>';
     return '<div class="' + cls + '"><span class="slotlbl">' + label + '</span>' + who + '<div class="act">' + act + '</div></div>';
   }
   function render() {
@@ -149,6 +172,14 @@
     b.forEach(function (pid) { html += row('BN', pid, 'bench'); });
     if (moving && moving.from !== 'bench') html += row('BN', null, 'empty-bench');
     if (!b.length && !(moving && moving.from !== 'bench')) html += '<div class="empty small">Empty</div>';
+    html += '<div class="lu-head"><span>IR</span><span class="grow"></span><span>' + IR.length + '/' + IR_SLOTS + '</span></div>';
+    IR.forEach(function (p) {
+      html += '<div class="lu-row' + (moving ? ' dim' : '') + '"><span class="slotlbl">IR</span><a class="who" href="/players/' + p.id + '">' + avatar(p) +
+        '<span class="txt"><div class="nm ellip">' + esc(p.name) + badge(p) + '</div><div class="mt">' + esc(p.team) + ' · ' + p.pos.join('/') + '</div></span></a>' +
+        '<div class="num"></div><div class="act">' + (moving ? '' : '<button class="mv-btn" data-activate="' + p.id + '">ACTIVATE</button>') + '</div></div>';
+    });
+    if (moving && valid('ir')) html += row('IR', null, 'empty-ir');
+    else if (!IR.length) html += '<div class="empty small">Empty</div>';
     rowsEl.innerHTML = html;
   }
 
@@ -171,7 +202,17 @@
   }
 
   rowsEl.addEventListener('click', function (e) {
-    var m = e.target.closest('[data-move]'), h = e.target.closest('[data-here]');
+    var m = e.target.closest('[data-move]'), h = e.target.closest('[data-here]'), a = e.target.closest('[data-activate]');
+    if (a) {
+      e.preventDefault();
+      post('/team/ir', {player_id: a.dataset.activate, action: 'activate'}).then(function () { location.reload(); });
+      return;
+    }
+    if (h && JSON.parse(h.dataset.here) === 'ir') {
+      e.preventDefault();
+      post('/team/ir', {player_id: moving.pid, action: 'ir'}).then(function () { location.reload(); });
+      return;
+    }
     if (m) {
       e.preventDefault();
       var pid = parseInt(m.dataset.move, 10);
@@ -183,6 +224,17 @@
       apply(JSON.parse(h.dataset.here));
       moving = null; render(); save(prev);
     }
+  });
+  document.getElementById('auto-btn').addEventListener('click', function () {
+    var btn = this; btn.disabled = true;
+    fetch('/team/{{ team.id }}/lineup/{{ week }}/auto', {method: 'POST', headers: {'Accept': 'application/json'}, credentials: 'same-origin'})
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        btn.disabled = false;
+        if (!j.ok) { toast(j.error || 'Auto failed', true); return; }
+        lineup = j.lineup; moving = null; render(); toast('Lineup set · proj ' + j.projected.toFixed(1));
+      })
+      .catch(function () { btn.disabled = false; toast('No connection', true); });
   });
   render();
 })();

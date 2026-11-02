@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 import httpx
 
 from .. import config
-from .base import GameLog, PlayerInfo, expand_positions, minutes_to_float
+from .base import GameLog, PlayerInfo, expand_positions, injury_code, minutes_to_float
 
 BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba"
 TEAM_FIX = {"SA": "SAS", "NY": "NYK", "GS": "GSW", "NO": "NOP", "WSH": "WAS", "UTAH": "UTA", "PHO": "PHX"}
@@ -77,6 +77,19 @@ def completed_events(scoreboard: dict) -> list[tuple[str, date]]:
     return out
 
 
+def parse_schedule(scoreboard: dict) -> list[tuple[str, date, str]]:
+    """(event id, US Eastern date, team) for every scheduled or played game."""
+    out = []
+    for ev in scoreboard.get("events", []):
+        when = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).astimezone(config.LEAGUE_TZ).date()
+        for comp in (ev.get("competitions") or [{}])[:1]:
+            for c in comp.get("competitors", []):
+                abbr = ((c.get("team") or {}).get("abbreviation")) or ""
+                if abbr:
+                    out.append((str(ev["id"]), when, _team(abbr)))
+    return out
+
+
 def parse_roster(body: dict, team_abbr: str) -> list[PlayerInfo]:
     athletes = body.get("athletes", [])
     if athletes and isinstance(athletes[0], dict) and "items" in athletes[0]:  # grouped by position
@@ -85,8 +98,10 @@ def parse_roster(body: dict, team_abbr: str) -> list[PlayerInfo]:
     for a in athletes:
         pos = expand_positions(((a.get("position") or {}).get("abbreviation")) or "")
         name = a.get("displayName") or a.get("fullName")
+        inj = a.get("injuries") or []
+        status = (inj[0].get("status") or "") if inj and isinstance(inj[0], dict) else ""
         if pos and name:
-            out.append(PlayerInfo(int(a["id"]), name, _team(team_abbr), pos))
+            out.append(PlayerInfo(int(a["id"]), name, _team(team_abbr), pos, injury_code(status)))
     return out
 
 
@@ -120,3 +135,11 @@ class EspnProvider:
 
     def season_averages(self, season: str) -> dict[int, dict]:
         return {}  # ranks come from this season's games once synced
+
+    def schedule(self, start: date, end: date) -> list[tuple[str, date, str]]:
+        out = []
+        d = start
+        while d <= end:
+            out += parse_schedule(self._get("/scoreboard", dates=d.strftime("%Y%m%d"), seasontype=2))
+            d += timedelta(days=1)
+        return out

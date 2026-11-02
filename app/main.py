@@ -212,8 +212,10 @@ def team_page(request: Request, tid: int, week: int | None = None, db: Session =
         raise LeagueError("Team not found.")
     players = lineups.roster_players(db, tid)
     in_season = league.status in ("season", "playoffs", "done")
-    ctx = {"nav": "team" if user.team and user.team.id == tid else "league", "team": team, "players": players}
-    ids = [p.id for p in players]
+    ir = lineups.ir_players(db, tid)
+    ctx = {"nav": "team" if user.team and user.team.id == tid else "league", "team": team, "players": players,
+           "ir": ir, "IR_SLOTS": config.IR_SLOTS, "inj": {p.id: p.injury for p in players + ir if p.injury}}
+    ids = [p.id for p in players + ir]
     ctx["savg"] = season_avgs(db, league, ids)
     if in_season:
         week = week or (first_open_week(league) if league.status != "done" else current_week(league))
@@ -225,11 +227,21 @@ def team_page(request: Request, tid: int, week: int | None = None, db: Session =
         starters = set(v for v in lu.values() if v)
         editable = not locked and user.team and user.team.id == tid
         options = {i: [p for p in players if lineups.eligible(p, s)] for i, s in enumerate(config.STARTER_SLOTS)}
+        from .services.projections import project
+        proj = project(db, league, players, week)
+        ctx["proj"] = proj
         ctx["roster_json"] = [{"id": p.id, "name": p.name, "team": p.nba_team, "pos": p.position_list,
+                               "proj": proj[p.id].expected, "ppg": proj[p.id].ppg, "inj": p.injury,
+                               "left": round(proj[p.id].games_left, 1), "known": proj[p.id].known_schedule,
                                "avg": ctx["savg"].get(p.id, (0, None))[1], "gp": ctx["savg"].get(p.id, (0, 0))[0],
                                "img": ui.player_img(p.id), "ini": ui.initials(p.name),
                                "color": ui.team_color(p.nba_team)} for p in players]
         ctx["lineup_json"] = [lu.get(i) for i in range(len(config.STARTER_SLOTS))]
+        ctx["ir_json"] = [{"id": p.id, "name": p.name, "team": p.nba_team, "pos": p.position_list, "inj": p.injury,
+                           "img": ui.player_img(p.id), "ini": ui.initials(p.name), "color": ui.team_color(p.nba_team),
+                           "avg": ctx["savg"].get(p.id, (0, None))[1], "gp": ctx["savg"].get(p.id, (0, 0))[0]}
+                          for p in ir]
+        ctx["ir_open"] = len(ir) < config.IR_SLOTS
         ctx["elig_json"] = {k: sorted(v) for k, v in config.SLOT_ELIGIBILITY.items()}
         ctx.update(week=week, label=week_label(league, week), locked=locked, lineup=lu, rows=rows, score=score,
                    bench=[p for p in players if p.id not in starters], editable=editable, options=options,
@@ -266,6 +278,50 @@ async def save_lineup(request: Request, tid: int, week: int, db: Session = Depen
         return JSONResponse({"ok": True})
     flash(request, "Lineup saved.")
     return redirect(f"/team/{tid}?week={week}")
+
+
+@app.post("/team/{tid}/lineup/{week}/auto")
+def auto_lineup(request: Request, tid: int, week: int, db: Session = Depends(get_db),
+                user: User = Depends(current_user)):
+    from .services.projections import best_lineup, project
+    league = get_league(db)
+    if not user.team or user.team.id != tid:
+        return JSONResponse({"ok": False, "error": "You can only edit your own lineup."}, status_code=403)
+    players = lineups.roster_players(db, tid)
+    proj = project(db, league, players, week)
+    pick = best_lineup(players, {pid: pr.expected for pid, pr in proj.items()})
+    assignment = {i: pick.get(i) for i in range(len(config.STARTER_SLOTS))}
+    try:
+        lineups.set_lineup(db, league, user.team, week, assignment)
+    except LeagueError as e:
+        db.rollback()
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+    db.commit()
+    total = round(sum(proj[p].expected for p in pick.values()), 1)
+    return JSONResponse({"ok": True, "lineup": [assignment[i] for i in range(len(config.STARTER_SLOTS))],
+                         "projected": total})
+
+
+@app.post("/team/ir")
+def ir_action(request: Request, player_id: int = Form(...), action: str = Form(...), db: Session = Depends(get_db),
+              user: User = Depends(current_user)):
+    league = get_league(db)
+    if not user.team:
+        raise LeagueError("You don't have a team.")
+    p = db.get(Player, player_id)
+    if action == "ir":
+        roster.move_to_ir(db, league, user.team, player_id)
+        msg = f"{p.name} moved to IR."
+    elif action == "activate":
+        roster.activate_from_ir(db, league, user.team, player_id)
+        msg = f"{p.name} activated."
+    else:
+        raise LeagueError("Unknown action.")
+    db.commit()
+    if "application/json" in request.headers.get("accept", ""):
+        return JSONResponse({"ok": True})
+    flash(request, msg)
+    return redirect(_back(request, f"/team/{user.team.id}"))
 
 
 @app.post("/team/drop")
@@ -329,12 +385,15 @@ def player_page(request: Request, pid: int, db: Session = Depends(get_db), user:
     games = list(db.scalars(select(PlayerGame).where(PlayerGame.player_id == pid)
                             .order_by(PlayerGame.game_date.desc()).limit(15)))
     owner_id = roster.owner_id(db, pid)
+    my_spot = db.scalar(select(RosterSpot).where(RosterSpot.player_id == pid, RosterSpot.team_id == user.team.id)) \
+        if user.team else None
     my_roster = lineups.roster_players(db, user.team.id) if user.team else []
     full = len(my_roster) >= config.ROSTER_MAX
     return render(request, "player.html", db, user, nav="players", p=p, games=games, fpts=game_fpts,
                   owner=db.get(Team, owner_id) if owner_id else None, waiver=roster.waiver_until(db, pid),
                   savg=season_avgs(db, league, [pid]).get(pid), ravg=recent_avgs(db, [pid]).get(pid),
-                  my_roster=my_roster, full=full)
+                  my_roster=my_roster, full=full, my_spot=my_spot, ir_slots=config.IR_SLOTS,
+                  ir_used=len(lineups.ir_players(db, user.team.id)) if user.team else 0)
 
 
 @app.post("/players/{pid}/add")
@@ -502,8 +561,8 @@ def new_trade(request: Request, with_team: int, db: Session = Depends(get_db), u
     other = db.get(Team, with_team)
     if not other or not user.team:
         raise LeagueError("Team not found.")
-    mine = lineups.roster_players(db, user.team.id)
-    theirs = lineups.roster_players(db, other.id)
+    mine = lineups.roster_players(db, user.team.id, include_ir=True)
+    theirs = lineups.roster_players(db, other.id, include_ir=True)
     savg = season_avgs(db, league, [p.id for p in mine + theirs])
     return render(request, "trade_new.html", db, user, nav="more", other=other, mine=mine, theirs=theirs, savg=savg)
 

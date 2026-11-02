@@ -32,7 +32,31 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 def init_db(eng=None):
     from . import models  # noqa: F401  (register tables)
-    Base.metadata.create_all(eng or engine)
+    eng = eng or engine
+    Base.metadata.create_all(eng)
+    _add_missing_columns(eng)
+
+
+def _add_missing_columns(eng) -> None:
+    """Tiny auto-migration: add columns that were added to models after the
+    database was created. Only handles new columns, which is all we need."""
+    from sqlalchemy import inspect, text
+    insp = inspect(eng)
+    with eng.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not insp.has_table(table.name):
+                continue
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in have:
+                    continue
+                ddl_type = col.type.compile(dialect=eng.dialect)
+                default = ""
+                if col.default is not None and col.default.is_scalar:
+                    v = col.default.arg
+                    default = " DEFAULT " + ("TRUE" if v is True else "FALSE" if v is False else
+                                             str(v) if isinstance(v, (int, float)) else "'" + str(v).replace("'", "''") + "'")
+                conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {ddl_type}{default}'))
 
 
 def get_db():

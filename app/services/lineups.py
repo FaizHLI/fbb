@@ -8,10 +8,17 @@ from ..weeks import first_open_week, is_locked
 from .common import LeagueError
 
 
-def roster_players(db: Session, team_id: int) -> list[Player]:
-    return list(db.scalars(
-        select(Player).join(RosterSpot, RosterSpot.player_id == Player.id)
-        .where(RosterSpot.team_id == team_id).order_by(Player.rank.is_(None), Player.rank, Player.name)))
+def roster_players(db: Session, team_id: int, include_ir: bool = False) -> list[Player]:
+    """Active roster (what lineups use). include_ir=True adds players on IR."""
+    q = select(Player).join(RosterSpot, RosterSpot.player_id == Player.id).where(RosterSpot.team_id == team_id)
+    if not include_ir:
+        q = q.where(RosterSpot.on_ir.is_(False))
+    return list(db.scalars(q.order_by(Player.rank.is_(None), Player.rank, Player.name)))
+
+
+def ir_players(db: Session, team_id: int) -> list[Player]:
+    return list(db.scalars(select(Player).join(RosterSpot, RosterSpot.player_id == Player.id)
+                           .where(RosterSpot.team_id == team_id, RosterSpot.on_ir.is_(True)).order_by(Player.name)))
 
 
 def eligible(player: Player, slot: str) -> bool:

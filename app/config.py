@@ -27,6 +27,7 @@ LEAGUE_TZ = ZoneInfo(os.environ.get("LEAGUE_TZ", "America/New_York"))
 STARTER_SLOTS = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL", "UTIL", "UTIL"]
 BENCH_SIZE = 3
 ROSTER_MAX = len(STARTER_SLOTS) + BENCH_SIZE  # also the number of draft rounds
+IR_SLOTS = 1  # extra spots for players listed OUT; they don't count toward ROSTER_MAX
 
 SLOT_ELIGIBILITY = {
     "PG": {"PG"},

@@ -7,7 +7,7 @@ from statistics import pstdev
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import League, Matchup, PlayerGame, Team
+from ..models import League, Matchup, Player, PlayerGame, Team
 from ..scoring import PlayerWeek, game_fpts, team_week
 from ..weeks import is_locked, today_local, week_end, week_start
 from .lineups import ensure_lineup, preview_lineup
@@ -53,14 +53,16 @@ def _profiles(db: Session, player_ids, before: date) -> dict[int, tuple[float, f
     return out
 
 
-def _team_projection(league: League, week: int, rows: list[PlayerWeek], profiles, today: date) -> tuple[float, float]:
+def _team_projection(league: League, week: int, rows: list[PlayerWeek], profiles, today: date,
+                     left_by_player: dict[int, float] | None = None) -> tuple[float, float]:
     start, end = week_start(league, week), week_end(league, week)
     days_left = 0 if today > end else (end - max(today, start)).days + 1
-    remaining = GAMES_PER_DAY * days_left
+    default_left = GAMES_PER_DAY * days_left
     mean = var = 0.0
     for r in rows:
         if not r.player_id:
             continue
+        remaining = (left_by_player or {}).get(r.player_id, default_left)
         mu, sd = profiles.get(r.player_id, (PRIOR_MEAN, PRIOR_SD))
         k = r.games
         if k > 0:
@@ -73,6 +75,26 @@ def _team_projection(league: League, week: int, rows: list[PlayerWeek], profiles
             mean += (1 - p0) * mu
             var += (1 - p0) * cond_var + p0 * (1 - p0) * mu * mu
     return mean, var
+
+
+def _games_left(db: Session, league: League, week: int, player_ids, today: date) -> dict[int, float]:
+    """Scheduled team games left this week per player, when the NBA schedule is known.
+    Games today count only if the player hasn't logged one yet today."""
+    from .projections import schedule_known, team_games
+    ws, we = week_start(league, week), week_end(league, week)
+    if not schedule_known(db, ws, we) or today > we:
+        return {}
+    ids = [p for p in player_ids if p]
+    players = list(db.scalars(select(Player).where(Player.id.in_(ids)))) if ids else []
+    from_day = max(ws, today)
+    sched = team_games(db, {p.nba_team for p in players}, from_day, we)
+    played_today = set(db.scalars(select(PlayerGame.player_id).where(PlayerGame.player_id.in_(ids),
+                                                                       PlayerGame.game_date == from_day))) if ids else set()
+    out = {}
+    for p in players:
+        dates = sched.get(p.nba_team, [])
+        out[p.id] = float(sum(1 for d in dates if d > from_day or p.id not in played_today))
+    return out
 
 
 @dataclass
@@ -91,8 +113,9 @@ def win_probability(db: Session, league: League, m: Matchup, view=None, today: d
     today = today or today_local()
     ids = [r.player_id for r in hrows + arows]
     profiles = _profiles(db, ids, min(today, week_end(league, m.week)))
-    hm, hv = _team_projection(league, m.week, hrows, profiles, today)
-    am, av = _team_projection(league, m.week, arows, profiles, today)
+    left = _games_left(db, league, m.week, ids, today)
+    hm, hv = _team_projection(league, m.week, hrows, profiles, today, left)
+    am, av = _team_projection(league, m.week, arows, profiles, today, left)
     sd = sqrt(hv + av)
     if sd < 1e-6:
         p = 1.0 if hm > am else 0.0 if hm < am else (1.0 if m.is_playoff else 0.5)

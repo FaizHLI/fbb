@@ -6,7 +6,7 @@
 <div class="card player-hero" style="margin-bottom:8px">
   {{ avatar(p.id, p.name, p.nba_team, 'lg') }}
   <div class="grow"><div style="font-size:20px;font-weight:800" class="ellip">{{ p.name }}</div>
-    <div class="muted small">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}{% if p.rank %} · Rank {{ p.rank }}{% endif %}</div></div>
+    <div class="muted small">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}{% if p.rank %} · Rank {{ p.rank }}{% endif %}{% if p.injury %} · <span class="inj inj-{{ p.injury|lower }}">{{ p.injury }}</span>{% endif %}</div></div>
 </div>
 <div class="card">
   <div class="spread">
@@ -21,10 +21,19 @@
 
 {% if me and league.status in ('season', 'playoffs') %}
   {% if owner and owner.id == me.id %}
-    <form method="post" action="/team/drop" onsubmit="return confirm('Drop {{ p.name|e }}?')">
+    <div class="btns" style="margin-bottom:12px">
+    {% if my_spot and my_spot.on_ir %}
+      <form method="post" action="/team/ir" style="flex:1"><input type="hidden" name="player_id" value="{{ p.id }}"><input type="hidden" name="action" value="activate">
+        <button class="btn primary block" type="submit">Activate from IR</button></form>
+    {% elif p.ir_eligible and ir_used < ir_slots %}
+      <form method="post" action="/team/ir" style="flex:1"><input type="hidden" name="player_id" value="{{ p.id }}"><input type="hidden" name="action" value="ir">
+        <button class="btn block" type="submit">Move to IR</button></form>
+    {% endif %}
+    <form method="post" action="/team/drop" style="flex:1" onsubmit="return confirm('Drop {{ p.name|e }}?')">
       <input type="hidden" name="player_id" value="{{ p.id }}">
       <button class="btn danger block" type="submit">Drop</button>
     </form>
+    </div>
   {% elif owner %}
     <a class="btn block" href="/trades/new?with_team={{ owner.id }}">Trade for {{ p.name }}</a>
   {% elif p.active %}
