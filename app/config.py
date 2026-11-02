@@ -15,8 +15,9 @@ for _prefix in ("postgres://", "postgresql://"):
     if DATABASE_URL.startswith(_prefix):
         DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len(_prefix):]
 SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-before-going-live")
-# "nba_api" (free, stats.nba.com), "balldontlie" (needs API key), or "fake" (demo data)
-STATS_PROVIDER = os.environ.get("STATS_PROVIDER", "nba_api")
+# "espn" (free, public ESPN API), "nba_api" (free, stats.nba.com; blocks most cloud
+# servers), "balldontlie" (needs API key), or "fake" (demo data)
+STATS_PROVIDER = os.environ.get("STATS_PROVIDER", "espn")
 BALLDONTLIE_API_KEY = os.environ.get("BALLDONTLIE_API_KEY", "")
 # NBA schedule runs on US Eastern time; weeks start Monday 00:00 in this zone.
 LEAGUE_TZ = ZoneInfo(os.environ.get("LEAGUE_TZ", "America/New_York"))

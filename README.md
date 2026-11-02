@@ -53,7 +53,8 @@ Set `STATS_PROVIDER`:
 
 | Value | Cost | Notes |
 |---|---|---|
-| `nba_api` (default) | Free | Uses stats.nba.com, which blocks many cloud servers. If the Commissioner page shows "Stats synced: never" after a day, switch to balldontlie. |
+| `espn` (default) | Free | ESPN's public site API. No key. Player names match ESPN fantasy, so imported drafts link up exactly. Unofficial, so it could change. |
+| `nba_api` | Free | Uses stats.nba.com, which blocks most cloud servers (including GitHub Actions). |
 | `balldontlie` | Paid tier for box scores | Set `BALLDONTLIE_API_KEY`. |
 | `fake` | Free | Made-up data for testing. |
 
@@ -112,7 +113,7 @@ Notes:
 - Pushing to the repo redeploys the website. Data lives in Neon, so nothing is lost.
 - GitHub pauses scheduled workflows in public repos after 60 days with no commits. If that happens, the Actions tab shows a button to turn it back on.
 - Private repos get a monthly allowance of free Actions minutes. An hourly run uses roughly 1 to 2 minutes, which should fit, but check Settings > Billing if the repo is private.
-- If "Stats synced" on the Commissioner page stays at "never", stats.nba.com is blocking GitHub's servers. Add repo secrets `STATS_PROVIDER=balldontlie` and `BALLDONTLIE_API_KEY=<key>` (box scores need a paid balldontlie plan).
+- If the League jobs run fails with a stats error, check its log. As a backup you can add repo secrets `STATS_PROVIDER=balldontlie` and `BALLDONTLIE_API_KEY=<key>` (box scores need a paid balldontlie plan).
 
 ### Paid alternative
 
@@ -140,7 +141,7 @@ app/
   scoring.py       average-per-game scoring
   weeks.py         week dates and lineup locks
   services/        draft, lineups, roster (adds/waivers), trades, schedule, analytics
-  stats/           nba_api, balldontlie, fake providers
+  stats/           espn, nba_api, balldontlie, fake providers
   jobs.py          background sync and scoring
   cli.py           league setup commands
   main.py          web routes

@@ -26,5 +26,5 @@ jobs:
       - run: python -m app.jobs tick
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          STATS_PROVIDER: ${{ secrets.STATS_PROVIDER || 'nba_api' }}
+          STATS_PROVIDER: ${{ secrets.STATS_PROVIDER || 'espn' }}
           BALLDONTLIE_API_KEY: ${{ secrets.BALLDONTLIE_API_KEY }}

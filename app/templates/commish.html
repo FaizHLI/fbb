@@ -72,10 +72,11 @@
   <form method="post" action="/commish/process-waivers" onsubmit="return confirm('Process all pending claims now?')"><button class="btn block" type="submit">Process waivers now</button></form>
 {% endif %}
 
-<div class="section-title">Reset a password</div>
-<form method="post" action="/commish/reset-password" class="card">
+<div class="section-title">Edit a login</div>
+<form method="post" action="/commish/edit-login" class="card">
   <label class="field"><span>Team</span><select name="team_id">{% for t in teams %}<option value="{{ t.id }}">{{ t.name }} ({{ t.user.username if t.user }})</option>{% endfor %}</select></label>
-  <label class="field"><span>New password</span><input type="text" name="password" minlength="4" autocapitalize="none" required></label>
-  <button class="btn block" type="submit">Reset</button>
+  <label class="field"><span>New username (blank = keep)</span><input type="text" name="username" autocapitalize="none" autocomplete="off"></label>
+  <label class="field"><span>New password (blank = keep)</span><input type="text" name="password" autocapitalize="none" autocomplete="off"></label>
+  <button class="btn block" type="submit">Save</button>
 </form>
 {% endblock %}

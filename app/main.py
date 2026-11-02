@@ -594,14 +594,26 @@ async def commish_action(request: Request, action: str, db: Session = Depends(ge
         logins, placeholders = import_league(db, rows, picks, str(form.get("commish", "")), commish_user)
         db.commit()
         return render(request, "imported.html", db, user, nav="more", logins=logins, placeholders=placeholders)
-    elif action == "reset-password":
+    elif action == "edit-login":
         from .auth import hash_password
         team = db.get(Team, int(form["team_id"]))
-        pw = str(form["password"]).strip()
-        if not team or not team.user or len(pw) < 4:
-            raise LeagueError("Pick a team and a password of at least 4 characters.")
-        team.user.password_hash = hash_password(pw)
-        flash(request, f"Password reset for {team.user.username}.")
+        if not team or not team.user:
+            raise LeagueError("Pick a team.")
+        username = str(form.get("username", "")).strip().lower()
+        pw = str(form.get("password", "")).strip()
+        if not username and not pw:
+            raise LeagueError("Enter a new username, a new password, or both.")
+        if username and username != team.user.username:
+            if not username.replace("_", "").replace(".", "").isalnum() or len(username) > 50:
+                raise LeagueError("Usernames can use letters, numbers, _ and . only.")
+            if db.scalar(select(User).where(User.username == username)):
+                raise LeagueError(f"Username {username} is taken.")
+            team.user.username = username
+        if pw:
+            if len(pw) < 4:
+                raise LeagueError("Password must be at least 4 characters.")
+            team.user.password_hash = hash_password(pw)
+        flash(request, f"Login updated for {team.name}: {team.user.username}.")
     elif action == "process-waivers":
         res = roster.process_waivers(db, league, now=utcnow() + timedelta(days=365))
         flash(request, f"Processed {len(res)} claims.")

@@ -10,6 +10,9 @@ def get_provider(name: str | None = None) -> StatsProvider:
     if name == "balldontlie":
         from .balldontlie_provider import BallDontLieProvider
         return BallDontLieProvider()
+    if name == "espn":
+        from .espn_provider import EspnProvider
+        return EspnProvider()
     if name == "nba_api":
         from .nba_api_provider import NbaApiProvider
         return NbaApiProvider()

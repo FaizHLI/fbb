@@ -78,7 +78,9 @@ def rank_players(db: Session, league: League, provider=None) -> None:
 def sync_stats(db: Session, league: League, days_back: int = 3, provider=None) -> int:
     provider = provider or get_provider()
     end = today_local()
-    start = max(league.start_date - timedelta(days=7), end - timedelta(days=days_back))
+    if league.last_stats_sync is None:
+        days_back = 400  # first sync: backfill from three weeks before the league starts
+    start = max(league.start_date - timedelta(days=21), end - timedelta(days=days_back))
     if end < start:
         return 0
     logs = provider.game_logs(league.season, start, end)

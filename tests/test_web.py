@@ -127,3 +127,18 @@ def test_pages_through_season(db, league8):
     html = ok(boss, "/standings")
     assert "Final" in html
     assert "▲" in ok(boss, "/power") or "▼" in ok(boss, "/power")
+
+
+def test_commish_edits_login(db, league8):
+    boss = login("user1")
+    t2 = db.scalar(select(Team).where(Team.name == "Team 2"))
+    r = boss.post("/commish/edit-login", data={"team_id": t2.id, "username": "Bob", "password": "newpass"},
+                  follow_redirects=True)
+    assert "Login updated for Team 2: bob" in r.text
+    assert "taken" in boss.post("/commish/edit-login", data={"team_id": t2.id, "username": "user3"},
+                                follow_redirects=True).text
+    c = TestClient(app)
+    assert c.post("/login", data={"username": "bob", "password": "newpass"},
+                  follow_redirects=False).headers["location"] == "/"
+    assert c.post("/login", data={"username": "user2", "password": "pw"},
+                  follow_redirects=False).headers["location"] == "/login"
