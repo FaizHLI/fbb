@@ -1,7 +1,13 @@
 {% extends "base.html" %}
+{% from "_macros.html" import avatar with context %}
 {% block heading %}{{ p.name }}{% endblock %}
 {% block sub %}<div class="sub">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}{% if p.rank %} · #{{ p.rank }}{% endif %}</div>{% endblock %}
 {% block content %}
+<div class="card player-hero" style="margin-bottom:8px">
+  {{ avatar(p.id, p.name, p.nba_team, 'lg') }}
+  <div class="grow"><div style="font-size:20px;font-weight:800" class="ellip">{{ p.name }}</div>
+    <div class="muted small">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}{% if p.rank %} · Rank {{ p.rank }}{% endif %}</div></div>
+</div>
 <div class="card">
   <div class="spread">
     <div><div class="tiny muted">Season</div><div class="score" style="font-size:24px;font-weight:800">{{ savg[1] if savg else '-' }}</div><div class="tiny muted">{{ savg[0] if savg else 0 }}G</div></div>

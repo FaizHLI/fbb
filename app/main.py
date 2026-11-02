@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
@@ -37,6 +37,8 @@ app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 templates = Jinja2Templates(directory=BASE / "templates")
 templates.env.globals["SLOTS"] = config.STARTER_SLOTS
 templates.env.globals["ROSTER_MAX"] = config.ROSTER_MAX
+from . import ui  # noqa: E402
+ui.register(templates.env)
 templates.env.filters["local"] = lambda dt: dt.replace(tzinfo=timezone.utc).astimezone(config.LEAGUE_TZ) if dt else dt
 templates.env.filters["log2"] = lambda n: max(1, int(n).bit_length() - 1)
 
@@ -223,6 +225,12 @@ def team_page(request: Request, tid: int, week: int | None = None, db: Session =
         starters = set(v for v in lu.values() if v)
         editable = not locked and user.team and user.team.id == tid
         options = {i: [p for p in players if lineups.eligible(p, s)] for i, s in enumerate(config.STARTER_SLOTS)}
+        ctx["roster_json"] = [{"id": p.id, "name": p.name, "team": p.nba_team, "pos": p.position_list,
+                               "avg": ctx["savg"].get(p.id, (0, None))[1], "gp": ctx["savg"].get(p.id, (0, 0))[0],
+                               "img": ui.player_img(p.id), "ini": ui.initials(p.name),
+                               "color": ui.team_color(p.nba_team)} for p in players]
+        ctx["lineup_json"] = [lu.get(i) for i in range(len(config.STARTER_SLOTS))]
+        ctx["elig_json"] = {k: sorted(v) for k, v in config.SLOT_ELIGIBILITY.items()}
         ctx.update(week=week, label=week_label(league, week), locked=locked, lineup=lu, rows=rows, score=score,
                    bench=[p for p in players if p.id not in starters], editable=editable, options=options,
                    total=total_weeks(league), open_week=first_open_week(league))
@@ -237,15 +245,25 @@ async def save_lineup(request: Request, tid: int, week: int, db: Session = Depen
     if not user.team or user.team.id != tid:
         raise LeagueError("You can only edit your own lineup.")
     form = await request.form()
+    wants_json = "application/json" in request.headers.get("accept", "")
     assignment = {}
     for i in range(len(config.STARTER_SLOTS)):
         v = form.get(f"slot{i}")
         assignment[i] = int(v) if v else None
-    lineups.set_lineup(db, league, user.team, week, assignment)
-    if form.get("apply_rest"):
-        for w in range(week + 1, total_weeks(league) + 1):
-            lineups.set_lineup(db, league, user.team, w, assignment)
+    try:
+        lineups.set_lineup(db, league, user.team, week, assignment)
+        if form.get("apply_rest"):
+            for w in range(week + 1, total_weeks(league) + 1):
+                if not is_locked(league, w):
+                    lineups.set_lineup(db, league, user.team, w, assignment)
+    except LeagueError as e:
+        db.rollback()
+        if wants_json:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        raise
     db.commit()
+    if wants_json:
+        return JSONResponse({"ok": True})
     flash(request, "Lineup saved.")
     return redirect(f"/team/{tid}?week={week}")
 

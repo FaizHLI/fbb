@@ -29,3 +29,7 @@
   <a class="btn" href="{{ base }}week={{ week + 1 }}" {% if week >= total %}style="visibility:hidden"{% endif %} aria-label="Next week">›</a>
 </div>
 {%- endmacro %}
+
+{% macro avatar(pid, name, team, size='md') -%}
+<span class="av av-{{ size }}" style="--tc:{{ team_color(team) }}">{{ initials(name) }}{% set src = player_img(pid) %}{% if src %}<img src="{{ src }}" alt="" loading="lazy" onerror="this.remove()">{% endif %}</span>
+{%- endmacro %}

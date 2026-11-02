@@ -1,9 +1,11 @@
+{% from "_macros.html" import avatar with context %}
 <div class="card flush">
   <div class="pl tiny muted" style="min-height:0;padding-top:8px;padding-bottom:8px">
     <span class="grow">Player</span><span class="stat" style="min-width:44px">Avg</span><span class="stat" style="min-width:44px">14D</span>
   </div>
   {% for p in players %}
   <a class="pl" href="/players/{{ p.id }}">
+    {{ avatar(p.id, p.name, p.nba_team) }}
     <div class="info">
       <div class="name ellip">{{ p.name }}</div>
       <div class="meta ellip">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}

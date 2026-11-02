@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import avatar with context %}
 {% block heading %}Trade{% endblock %}
 {% block sub %}<div class="sub ellip">with {{ other.name }}</div>{% endblock %}
 {% block content %}
@@ -8,6 +9,7 @@
   <div class="card flush">
     {% for p in mine %}
     <label class="pl"><input type="checkbox" name="give" value="{{ p.id }}" style="width:22px;height:22px;accent-color:var(--accent)">
+      {{ avatar(p.id, p.name, p.nba_team, 'sm') }}
       <div class="info"><div class="name ellip">{{ p.name }}</div><div class="meta">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></div>
       <div class="stat"><b>{{ savg[p.id][1] if savg.get(p.id) else '-' }}</b><span>avg</span></div></label>
     {% endfor %}
@@ -16,6 +18,7 @@
   <div class="card flush">
     {% for p in theirs %}
     <label class="pl"><input type="checkbox" name="get" value="{{ p.id }}" style="width:22px;height:22px;accent-color:var(--accent)">
+      {{ avatar(p.id, p.name, p.nba_team, 'sm') }}
       <div class="info"><div class="name ellip">{{ p.name }}</div><div class="meta">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></div>
       <div class="stat"><b>{{ savg[p.id][1] if savg.get(p.id) else '-' }}</b><span>avg</span></div></label>
     {% endfor %}

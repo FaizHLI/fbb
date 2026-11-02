@@ -119,7 +119,7 @@ Notes:
 
 Any host with a persistent disk can run everything in one service with SQLite: deploy the Dockerfile, mount a disk at `/data`, leave `DATABASE_URL` unset and `RUN_JOBS` at its default. Leave the GitHub `DATABASE_URL` secret unset in that case; the workflow then does nothing.
 
-Environment variables: `SECRET_KEY` (required), `DATABASE_URL`, `RUN_JOBS`, `STATS_PROVIDER`, `BALLDONTLIE_API_KEY`, `LEAGUE_TZ`, `PORT`, `JOB_MINUTES`, plus the `LEAGUE_*` and `ADMIN_*` values above.
+Environment variables: `SECRET_KEY` (required), `DATABASE_URL`, `RUN_JOBS`, `PLAYER_IMAGE_URL` (optional photo source, a URL with `{id}` for the player id; initials show when unset), `STATS_PROVIDER`, `BALLDONTLIE_API_KEY`, `LEAGUE_TZ`, `PORT`, `JOB_MINUTES`, plus the `LEAGUE_*` and `ADMIN_*` values above.
 
 ## Tests
 

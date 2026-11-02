@@ -1,7 +1,9 @@
+{% from "_macros.html" import avatar with context %}
 <div class="card flush">
   {% for p in players %}
   <div class="pl">
     <span class="tiny muted" style="width:26px;text-align:right;flex:none">{{ p.rank or '' }}</span>
+    {{ avatar(p.id, p.name, p.nba_team, 'sm') }}
     <div class="info"><div class="name ellip">{{ p.name }}</div><div class="meta">{{ p.nba_team }} · {{ p.positions|replace(',', '/') }}</div></div>
     {% if live %}
     <form class="inline" hx-post="/draft/pick" hx-swap="none" hx-confirm="Draft {{ p.name|e }}?">
