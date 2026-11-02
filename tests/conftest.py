@@ -5,7 +5,7 @@ from datetime import date, datetime
 import pytest
 
 _tmp = tempfile.mkdtemp()
-os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{_tmp}/test.db"
 os.environ["STATS_PROVIDER"] = "fake"
 os.environ["SECRET_KEY"] = "test"
 

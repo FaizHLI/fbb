@@ -64,14 +64,27 @@ Set `STATS_PROVIDER`:
 `start.sh` runs the first-run setup, the web server, and a loop that ticks every 20 minutes, so one service is enough.
 The Commissioner page also has Sync now, Finalize week and Process waivers buttons.
 
-## Hosting
+## Hosting (free)
 
-You need a host that builds the `Dockerfile` from GitHub and gives you a persistent disk for the SQLite database (mounted at `/data`). Railway, Render (paid plan, for the disk) and Fly.io all work. Steps for Railway, all in the browser:
+Three free services, all set up in the browser:
 
-1. Sign in at railway.com with GitHub. New Project > Deploy from GitHub repo > pick this repo.
-2. On the service, open Settings > Volumes (or right-click the canvas > Volume) and add a volume with mount path `/data`.
-3. Open Variables and add:
+- **Neon** holds the database (free Postgres).
+- **Render** runs the website (free instance; it sleeps when idle, so the first visit after a while takes up to a minute).
+- **GitHub Actions** runs the background jobs every hour, even while the website sleeps (`.github/workflows/jobs.yml`).
+
+### 1. Database (Neon)
+
+1. Sign up at neon.tech and create a project (any name, closest region to US East).
+2. Copy the connection string. It looks like `postgresql://user:pass@ep-xxx.aws.neon.tech/neondb?sslmode=require`.
+
+### 2. Website (Render)
+
+1. Sign up at render.com with GitHub. New > Web Service > pick this repo.
+2. Language: Docker. Instance type: Free.
+3. Under Advanced, set Health Check Path to `/healthz` and add these environment variables:
    ```
+   DATABASE_URL=<Neon connection string>
+   RUN_JOBS=0
    SECRET_KEY=<long random string>
    LEAGUE_NAME=Hoops League
    LEAGUE_SEASON=2026-27
@@ -83,23 +96,37 @@ You need a host that builds the `Dockerfile` from GitHub and gives you a persist
    ADMIN_PASSWORD=<your password>
    ```
    `LEAGUE_START` must be a Monday. 20 regular weeks + 2 playoff weeks from Nov 9 ends Apr 11.
-4. Settings > Networking > Generate Domain. Railway gives you an HTTPS URL.
-5. Redeploy. Check the deploy logs for `bootstrap: created ...`.
-6. Open the URL on your phone, log in, and go to More > Commissioner to import or add teams.
-7. Send each friend the URL and their login. On iPhone: Share > Add to Home Screen.
+4. Create Web Service. The deploy logs should show `bootstrap: created Hoops League`.
+
+### 3. Background jobs (GitHub Actions)
+
+1. In this repo on GitHub: Settings > Secrets and variables > Actions > New repository secret.
+   Name `DATABASE_URL`, value = the same Neon connection string.
+2. Actions tab > League jobs > Run workflow, to test it. After that it runs every hour on its own.
+
+### 4. Use it
+
+Open your `https://<name>.onrender.com` link, log in, and go to More > Commissioner to import from ESPN or add teams. On iPhone: Share > Add to Home Screen.
 
 Notes:
-- Only run one instance. The database is a single file.
-- Pushing to the repo redeploys automatically. The volume keeps your data.
-- To start over, delete the volume's `hoops.db` (or the volume) and redeploy.
+- Pushing to the repo redeploys the website. Data lives in Neon, so nothing is lost.
+- GitHub pauses scheduled workflows in public repos after 60 days with no commits. If that happens, the Actions tab shows a button to turn it back on.
+- Private repos get a monthly allowance of free Actions minutes. An hourly run uses roughly 1 to 2 minutes, which should fit, but check Settings > Billing if the repo is private.
+- If "Stats synced" on the Commissioner page stays at "never", stats.nba.com is blocking GitHub's servers. Add repo secrets `STATS_PROVIDER=balldontlie` and `BALLDONTLIE_API_KEY=<key>` (box scores need a paid balldontlie plan).
 
-Environment variables: `SECRET_KEY` (required), `DATABASE_URL` (default in Docker: `sqlite:////data/hoops.db`), `STATS_PROVIDER`, `BALLDONTLIE_API_KEY`, `LEAGUE_TZ`, `PORT`, `JOB_MINUTES`, plus the `LEAGUE_*` and `ADMIN_*` values above.
+### Paid alternative
+
+Any host with a persistent disk can run everything in one service with SQLite: deploy the Dockerfile, mount a disk at `/data`, leave `DATABASE_URL` unset and `RUN_JOBS` at its default. Leave the GitHub `DATABASE_URL` secret unset in that case; the workflow then does nothing.
+
+Environment variables: `SECRET_KEY` (required), `DATABASE_URL`, `RUN_JOBS`, `STATS_PROVIDER`, `BALLDONTLIE_API_KEY`, `LEAGUE_TZ`, `PORT`, `JOB_MINUTES`, plus the `LEAGUE_*` and `ADMIN_*` values above.
 
 ## Tests
 
 ```sh
 pip install pytest
 pytest
+# against Postgres too:
+TEST_DATABASE_URL=postgresql://... pytest
 ```
 
 The tests play a full fake season through the draft, lineups, waivers, trades, and playoffs, and load every page.

@@ -118,7 +118,11 @@ def lock_lineups(db: Session, league: League) -> None:
 def tick(provider=None, log=print) -> None:
     db = SessionLocal()
     try:
-        league = get_league(db)
+        from .models import League as _League
+        league = db.scalar(select(_League).limit(1))
+        if not league:
+            log("no league yet; nothing to do")
+            return
         provider = provider or get_provider()
         if not league.last_player_sync or utcnow() - league.last_player_sync > timedelta(hours=20):
             log(f"players: {sync_players(db, league, provider)}")

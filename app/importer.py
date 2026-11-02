@@ -103,7 +103,7 @@ def find_player(db: Session, pick: RecapPick, by_name: dict[str, list[Player]]) 
         return matches[0]
     # Placeholder with a negative id; linked to the real player on a later sync.
     low = db.scalar(select(func.min(Player.id))) or 0
-    p = Player(id=min(low, 0) - 1, name=pick.name, nba_team=nba_team,
+    p = Player(id=min(low, 0) - 1, name=pick.name[:80], nba_team=nba_team[:5],
                positions=",".join(expand_positions(pick.position)) or pick.position, active=True)
     db.add(p)
     db.flush()
@@ -139,14 +139,15 @@ def import_league(db: Session, teams_rows: list[dict], picks: list[RecapPick], c
         if is_commish and commish_user is not None:
             user, username, password = commish_user, commish_user.username, "(your current password)"
         else:
-            username = re.sub(r"[^a-z0-9]", "", r["abbrev"].lower())
+            username = re.sub(r"[^a-z0-9]", "", r["abbrev"].lower())[:40]
             if db.scalar(select(User).where(User.username == username)):
                 username += "1"
             password = secrets.token_urlsafe(6)
             user = User(username=username, password_hash=hash_password(password), is_commish=is_commish)
             db.add(user)
         db.flush()
-        t = Team(name=r["name"], abbrev=r["abbrev"].upper(), manager=r.get("manager", ""), user_id=user.id)
+        t = Team(name=r["name"][:80], abbrev=r["abbrev"].upper()[:6], manager=r.get("manager", "")[:80],
+                 user_id=user.id)
         db.add(t)
         db.flush()
         teams[r["name"]] = t

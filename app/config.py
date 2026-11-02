@@ -10,6 +10,10 @@ from zoneinfo import ZoneInfo
 
 # ---- Environment ----------------------------------------------------------
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./hoops.db")
+# Hosted Postgres (Neon, Supabase, Render) hands out postgres:// URLs; use the psycopg 3 driver.
+for _prefix in ("postgres://", "postgresql://"):
+    if DATABASE_URL.startswith(_prefix):
+        DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len(_prefix):]
 SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-before-going-live")
 # "nba_api" (free, stats.nba.com), "balldontlie" (needs API key), or "fake" (demo data)
 STATS_PROVIDER = os.environ.get("STATS_PROVIDER", "nba_api")
