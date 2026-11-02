@@ -10,6 +10,19 @@
 </div>
 <form method="post" action="/commish/sync"><button class="btn block" type="submit">Sync now</button></form>
 
+{% if not finalized %}
+<div class="section-title">League settings</div>
+<form method="post" action="/commish/settings" class="card" onsubmit="return confirm('Save settings? This rebuilds the schedule and resets saved lineups.')">
+  <label class="field"><span>League name</span><input type="text" name="name" value="{{ league.name }}"></label>
+  <label class="field"><span>Week 1 starts (a Monday)</span><input type="date" name="start" value="{{ league.start_date.isoformat() }}" required></label>
+  <div class="row">
+    <label class="field grow"><span>Regular season weeks</span><input type="number" name="weeks" value="{{ league.regular_season_weeks }}" min="1" max="30" inputmode="numeric"></label>
+    <label class="field grow"><span>Playoff teams</span><select name="playoff_teams">{% for n in (2, 4, 8) %}<option value="{{ n }}" {{ 'selected' if n == league.playoff_teams }}>{{ n }}</option>{% endfor %}</select></label>
+  </div>
+  <button class="btn block" type="submit">Save settings</button>
+</form>
+{% endif %}
+
 {% if league.status == 'setup' and not teams %}
   <div class="section-title">Import from ESPN</div>
   <form method="post" action="/commish/import" class="card">

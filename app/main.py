@@ -554,7 +554,8 @@ def commish_page(request: Request, db: Session = Depends(get_db), user: User = D
     n_players = db.scalar(select(func.count(Player.id)).where(Player.active.is_(True)))
     open_weeks = sorted(set(db.scalars(select(Matchup.week).where(Matchup.final.is_(False)))))
     pending = list(db.scalars(select(Trade).where(Trade.status == "pending")))
-    return render(request, "commish.html", db, user, nav="more", teams=teams, n_players=n_players,
+    finalized = bool(db.scalar(select(Matchup).where(Matchup.final.is_(True)).limit(1)))
+    return render(request, "commish.html", db, user, nav="more", teams=teams, n_players=n_players, finalized=finalized,
                   open_weeks=open_weeks, pending=pending, provider=config.STATS_PROVIDER)
 
 
@@ -589,6 +590,28 @@ async def commish_action(request: Request, action: str, db: Session = Depends(ge
     elif action == "undo-pick":
         draft.undo_last_pick(db, league)
         flash(request, "Last pick undone.")
+    elif action == "settings":
+        from datetime import date as _date
+        from sqlalchemy import delete as _delete
+        from .models import LineupSlot
+        if db.scalar(select(Matchup).where(Matchup.final.is_(True)).limit(1)):
+            raise LeagueError("Settings are locked once a week has been finalized.")
+        try:
+            start = _date.fromisoformat(str(form["start"]))
+        except ValueError:
+            raise LeagueError("Start date must look like 2026-10-19.")
+        if start.weekday() != 0:
+            raise LeagueError("Start date must be a Monday.")
+        weeks, playoff = int(form["weeks"]), int(form["playoff_teams"])
+        if not 1 <= weeks <= 30 or playoff not in (2, 4, 8) or playoff > league.num_teams:
+            raise LeagueError("Check the weeks and playoff teams.")
+        league.name = str(form.get("name") or league.name).strip()[:100]
+        league.start_date, league.regular_season_weeks, league.playoff_teams = start, weeks, playoff
+        if league.status in ("season", "playoffs"):
+            league.status = "season"
+            db.execute(_delete(LineupSlot))   # week numbers moved; lineups rebuild from rosters
+            schedule.create_regular_season(db, league)
+        flash(request, "Settings saved.")
     elif action == "timer":
         league.draft_timer_seconds = max(0, int(form["seconds"]))
         flash(request, "Timer updated.")

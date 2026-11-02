@@ -2,7 +2,7 @@
 from datetime import timedelta
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.jobs import lock_lineups, sync_stats
 from app.main import app
@@ -142,3 +142,27 @@ def test_commish_edits_login(db, league8):
                   follow_redirects=False).headers["location"] == "/"
     assert c.post("/login", data={"username": "user2", "password": "pw"},
                   follow_redirects=False).headers["location"] == "/login"
+
+
+def test_commish_changes_start_date(db, league8):
+    from app.services import draft as d
+    lg = league8
+    d.set_draft_order(db, lg)
+    d.start_draft(db, lg)
+    while lg.status == "drafting":
+        pk = d.current_pick(db)
+        d.make_pick(db, lg, pk.team, d.best_available(db).id)
+    db.commit()
+    boss = login("user1")
+    assert "League settings" in boss.get("/commish").text
+    bad = boss.post("/commish/settings", data={"start": "2026-10-20", "weeks": 22, "playoff_teams": 4},
+                    follow_redirects=True)
+    assert "must be a Monday" in bad.text
+    r = boss.post("/commish/settings", data={"name": "New Name", "start": "2026-10-19", "weeks": 22,
+                                             "playoff_teams": 4}, follow_redirects=True)
+    assert "Settings saved" in r.text
+    db.expire_all()
+    from app.models import League
+    lg2 = db.scalar(select(League))
+    assert str(lg2.start_date) == "2026-10-19" and lg2.regular_season_weeks == 22 and lg2.name == "New Name"
+    assert db.scalar(select(func.count(Matchup.id))) == 22 * 4
