@@ -102,8 +102,10 @@ def _finish(db: Session, league: League) -> None:
     teams = teams_in_order(db)
     for i, t in enumerate(reversed(teams), start=1):
         t.waiver_priority = i
+    from ..models import Matchup
     from .schedule import create_regular_season
-    create_regular_season(db, league)
+    if not db.scalar(select(Matchup.id).limit(1)):  # keep an imported schedule
+        create_regular_season(db, league)
     log(db, "draft", "The draft finished. Good luck!")
 
 

@@ -5,6 +5,9 @@
 {% block sub %}<div class="sub">{{ label }}</div>{% endblock %}
 {% block content %}
 {{ matchup_card({'m': m, 'home': home, 'away': away, 'hs': hs, 'as': as_, 'wp': wp, 'live': not m.final}, big=true, link=false) }}
+{% if imported %}
+<div class="card small muted">Result imported from ESPN.</div>
+{% else %}
 <div class="card flush">
   <div class="vs">
     <div class="small muted" style="border-top:0"><a href="/team/{{ home.id }}?week={{ m.week }}" class="ellip" style="display:block">{{ home.name }}</a></div>
@@ -27,4 +30,5 @@
     {% endfor %}
   </div>
 </div>
+{% endif %}
 {% endblock %}

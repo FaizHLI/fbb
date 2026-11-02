@@ -195,9 +195,10 @@ def matchup_page(request: Request, mid: int, db: Session = Depends(get_db), user
     wp = analytics.win_probability(db, league, m, view)
     tmap = team_map(db)
     rows = list(zip(view[1], view[3]))
+    imported = m.final and all(not h.player_id and not a.player_id for h, a in rows)
     db.commit()
     return render(request, "matchup.html", db, user, nav="home", m=m, home=tmap[m.home_team_id],
-                  away=tmap[m.away_team_id], hs=view[0], as_=view[2], rows=rows, wp=wp,
+                  away=tmap[m.away_team_id], hs=view[0], as_=view[2], rows=rows, wp=wp, imported=imported,
                   label=week_label(league, m.week))
 
 
@@ -694,6 +695,20 @@ async def commish_action(request: Request, action: str, db: Session = Depends(ge
         logins, placeholders = import_league(db, rows, picks, str(form.get("commish", "")), commish_user)
         db.commit()
         return render(request, "imported.html", db, user, nav="more", logins=logins, placeholders=placeholders)
+    elif action == "import-rosters":
+        from .importer import import_rosters, parse_rosters
+        names = [t.name for t in db.scalars(select(Team))]
+        res = import_rosters(db, league, parse_rosters(str(form.get("rosters", "")), names))
+        msg = f"Imported {res['players']} players. Week {res['week']} lineups set for {res['lineups']} teams."
+        if res["placeholders"]:
+            msg += f" Not matched yet (link on next sync): {', '.join(res['placeholders'][:8])}"
+        flash(request, msg)
+    elif action == "import-schedule":
+        from .importer import import_schedule, parse_schedule
+        names = [t.name for t in db.scalars(select(Team))]
+        res = import_schedule(db, league, parse_schedule(str(form.get("schedule", "")), names, league.season))
+        flash(request, f"Imported {res['weeks']} matchups, {res['playoff_rounds']} playoff rounds, "
+                       f"{res['results']} past results.")
     elif action == "edit-login":
         from .auth import hash_password
         team = db.get(Team, int(form["team_id"]))

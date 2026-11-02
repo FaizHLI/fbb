@@ -3,7 +3,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import (Boolean, Date, DateTime, Float, ForeignKey, Integer,
-                        String, UniqueConstraint)
+                        String, Text, UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base, utcnow
@@ -24,6 +24,9 @@ class League(Base):
     pick_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_player_sync: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_stats_sync: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Optional custom matchup periods (JSON list of [start, end] ISO dates), e.g. from an
+    # ESPN schedule with a short first week or a two-week All-Star matchup. Empty = 7-day weeks.
+    periods: Mapped[str] = mapped_column(Text, default="")
 
 
 class User(Base):

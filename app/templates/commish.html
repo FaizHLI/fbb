@@ -10,7 +10,23 @@
 </div>
 <form method="post" action="/commish/sync"><button class="btn block" type="submit">Sync now</button></form>
 
-{% if not finalized %}
+{% if teams and league.status in ('setup', 'season') %}
+<div class="section-title">Import ESPN schedule</div>
+<form method="post" action="/commish/import-schedule" class="card" onsubmit="return confirm('Replace the whole schedule and all results with ESPN\'s?')">
+  <label class="field"><span>Copy the whole Schedule page from ESPN</span><textarea name="schedule" rows="8" required></textarea></label>
+  <button class="btn block" type="submit">Import schedule</button>
+</form>
+{% endif %}
+
+{% if teams and league.status in ('season', 'playoffs') %}
+<div class="section-title">Import ESPN rosters</div>
+<form method="post" action="/commish/import-rosters" class="card" onsubmit="return confirm('Replace every roster with ESPN\'s?')">
+  <label class="field"><span>Copy the whole Rosters page from ESPN</span><textarea name="rosters" rows="8" required></textarea></label>
+  <button class="btn block" type="submit">Import rosters</button>
+</form>
+{% endif %}
+
+{% if not finalized and not league.periods %}
 <div class="section-title">League settings</div>
 <form method="post" action="/commish/settings" class="card" onsubmit="return confirm('Save settings? This rebuilds the schedule and resets saved lineups.')">
   <label class="field"><span>League name</span><input type="text" name="name" value="{{ league.name }}"></label>

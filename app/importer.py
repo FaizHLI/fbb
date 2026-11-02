@@ -240,3 +240,271 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ---- ESPN schedule -----------------------------------------------------------
+
+MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct",
+                                      "nov", "dec"], start=1)}
+PERIOD_RE = re.compile(r"^(?:Matchup\s+(?P<num>\d+)|Playoff Round\s+(?P<rnd>\d+))\s*"
+                       r"\((?P<m1>[A-Za-z]{3})\w*\s+(?P<d1>\d{1,2})\s*-\s*(?:(?P<m2>[A-Za-z]{3})\w*\s+)?(?P<d2>\d{1,2})\)")
+NUM_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
+
+
+@dataclass
+class SchedGame:
+    away: str
+    home: str
+    away_score: float | None
+    home_score: float | None
+
+
+@dataclass
+class SchedPeriod:
+    start: "date"
+    end: "date"
+    playoff_round: int | None
+    games: list
+
+
+def _season_date(season: str, month: str, day: int):
+    from datetime import date
+    m = MONTHS[month.lower()]
+    first_year = int(season[:4])
+    return date(first_year if m >= 7 else first_year + 1, m, day)
+
+
+def parse_schedule(text: str, team_names: list[str], season: str) -> list[SchedPeriod]:
+    """Read ESPN's league Schedule page (copied as text). Team names must match exactly;
+    in each matchup the first team listed is away, the second is home, and any two
+    numbers between them are the away and home scores."""
+    names = set(team_names)
+    out: list[SchedPeriod] = []
+    cur = None
+    pending, nums = None, []
+    for raw in text.splitlines():
+        ln = raw.strip()
+        if not ln:
+            continue
+        m = PERIOD_RE.match(ln)
+        if m:
+            if pending:
+                raise LeagueError(f"{pending} has no opponent in the matchup before {ln!r}.")
+            start = _season_date(season, m["m1"], int(m["d1"]))
+            end = _season_date(season, m["m2"] or m["m1"], int(m["d2"]))
+            cur = SchedPeriod(start, end, int(m["rnd"]) if m["rnd"] else None, [])
+            out.append(cur)
+            continue
+        if cur is None:
+            continue
+        if ln in names:
+            if pending is None:
+                pending, nums = ln, []
+            else:
+                scores = nums[-2:] if len(nums) >= 2 else [None, None]
+                cur.games.append(SchedGame(pending, ln, scores[0], scores[1]))
+                pending, nums = None, []
+        elif pending is not None and NUM_RE.match(ln):
+            nums.append(float(ln))
+    if pending:
+        raise LeagueError(f"{pending} has no opponent in the last matchup.")
+    if not out:
+        raise LeagueError("No matchups found. Copy the whole Schedule page from ESPN.")
+    return out
+
+
+def import_schedule(db: Session, league: League, periods_in: list[SchedPeriod]) -> dict:
+    """Replace the schedule with ESPN's: matchup dates, pairings, and final scores
+    for matchups that already have them."""
+    import json
+    from math import log2
+    from sqlalchemy import delete
+    from .models import LineupSlot, Matchup
+    if league.status not in ("setup", "season"):
+        raise LeagueError("The schedule can only be imported before the playoffs.")
+    teams = {t.name: t for t in db.scalars(select(Team))}
+    if len(teams) != league.num_teams:
+        raise LeagueError("Import teams (or add them) before the schedule.")
+    regular = [p for p in periods_in if p.playoff_round is None]
+    playoffs = [p for p in periods_in if p.playoff_round is not None]
+    if not regular:
+        raise LeagueError("No regular season matchups found.")
+    if any(p.playoff_round is None for p in periods_in[len(regular):]):
+        raise LeagueError("Playoff rounds must come after the regular season.")
+    for i, p in enumerate(periods_in):
+        if p.end < p.start or (i and p.start <= periods_in[i - 1].end):
+            raise LeagueError(f"Matchup dates overlap or go backwards near {p.start}.")
+    for n, p in enumerate(regular, start=1):
+        seen = [g.away for g in p.games] + [g.home for g in p.games]
+        unknown = sorted(set(seen) - set(teams))
+        if unknown:
+            raise LeagueError(f"Unknown team in matchup {n}: {', '.join(unknown)}")
+        if len(p.games) != league.num_teams // 2 or len(set(seen)) != league.num_teams:
+            raise LeagueError(f"Matchup {n} should have every team exactly once.")
+    playoff_teams = 2 ** len(playoffs) if playoffs else league.playoff_teams
+    if playoffs and playoff_teams > league.num_teams:
+        raise LeagueError("More playoff rounds than the league size allows.")
+
+    league.periods = json.dumps([[p.start.isoformat(), p.end.isoformat()] for p in regular + playoffs])
+    league.start_date = regular[0].start
+    league.regular_season_weeks = len(regular)
+    if playoffs:
+        league.playoff_teams = playoff_teams
+    elif league.playoff_teams > 1:
+        # keep 7-day playoff weeks after the last regular matchup
+        extra = []
+        last = regular[-1].end
+        from datetime import timedelta
+        for _ in range(int(log2(league.playoff_teams))):
+            extra.append([(last + timedelta(days=1)).isoformat(), (last + timedelta(days=7)).isoformat()])
+            last = last + timedelta(days=7)
+        league.periods = json.dumps(json.loads(league.periods) + extra)
+
+    db.execute(delete(LineupSlot))
+    db.execute(delete(Matchup))
+    finals = 0
+    for week, p in enumerate(regular, start=1):
+        for g in p.games:
+            m = Matchup(week=week, home_team_id=teams[g.home].id, away_team_id=teams[g.away].id)
+            if g.home_score is not None and g.away_score is not None:
+                m.home_score, m.away_score, m.final = g.home_score, g.away_score, True
+                m.winner_team_id = (m.home_team_id if g.home_score > g.away_score else
+                                    m.away_team_id if g.away_score > g.home_score else None)
+                finals += 1
+            db.add(m)
+    db.flush()
+    log(db, "week", f"Schedule imported from ESPN ({len(regular)} matchups, {finals} results)")
+    return {"weeks": len(regular), "playoff_rounds": len(playoffs), "results": finals}
+
+
+# ---- ESPN rosters ------------------------------------------------------------
+
+ROSTER_SLOTS = {"PG", "SG", "SF", "PF", "C", "G", "F", "UTIL", "BENCH", "BE", "BN", "IR"}
+RECORD_RE = re.compile(r"^\(\d+-\d+(?:-\d+)?\)$")
+INJURY_MAP = {"O": "OUT", "OUT": "OUT", "DTD": "DTD", "SSPD": "SUSP", "SUSP": "SUSP", "IR": "OUT"}
+ACQ_WORDS = ("draft", "trade", "free agency", "waivers", "waiver", "add")
+
+
+@dataclass
+class RosterEntry:
+    slot: str          # PG..UTIL, BN, IR
+    name: str
+    nba_team: str
+    positions: list
+    injury: str
+
+
+def _split_team_pos(s: str) -> tuple[str, list[str]] | None:
+    """'TORSF, SG' -> ('TOR', ['SF', 'SG']); 'SAC' -> ('SA', ['C'])."""
+    parts = [p.strip() for p in s.split(",")]
+    first = parts[0]
+    if len(first) < 3 or not first.isupper() or not first.isalpha():
+        return None
+    if first[-2:] in ("PG", "SG", "SF", "PF") and len(first) - 2 >= 2:
+        team, pos1 = first[:-2], first[-2:]
+    elif first[-1] == "C" and len(first) - 1 >= 2:
+        team, pos1 = first[:-1], "C"
+    else:
+        return None
+    rest = parts[1:]
+    if any(p not in ("PG", "SG", "SF", "PF", "C") for p in rest):
+        return None
+    return team, [pos1] + rest
+
+
+def _undouble(s: str) -> str:
+    """ESPN prints names twice when copied: 'Cade CunninghamCade Cunningham'."""
+    h = len(s) // 2
+    return s[:h] if len(s) % 2 == 0 and s[:h] == s[h:] else s
+
+
+def parse_rosters(text: str, team_names: list[str]) -> dict[str, list[RosterEntry]]:
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    names = set(team_names)
+    out: dict[str, list[RosterEntry]] = {}
+    team = None
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+        if ln in names and i + 1 < len(lines) and RECORD_RE.match(lines[i + 1]):
+            team = ln
+            out.setdefault(team, [])
+            i += 2
+            continue
+        if team and ln.upper() in ROSTER_SLOTS and i + 1 < len(lines):
+            nxt = lines[i + 1]
+            if nxt.lower() == "empty":
+                i += 2
+                continue
+            # name line (doubled), display line (name + injury tag), team/positions line
+            if i + 3 < len(lines):
+                name = _undouble(nxt)
+                disp = lines[i + 2]
+                tp = _split_team_pos(lines[i + 3])
+                if tp and disp.startswith(name):
+                    tag = disp[len(name):].strip().upper()
+                    slot = {"BENCH": "BN", "BE": "BN"}.get(ln.upper(), ln.upper())
+                    out[team].append(RosterEntry(slot, name, ESPN_TEAMS.get(tp[0], tp[0]), tp[1],
+                                                 INJURY_MAP.get(tag, "")))
+                    i += 4
+                    continue
+        i += 1
+    if not any(out.values()):
+        raise LeagueError("No players found. Copy the whole Rosters page from ESPN.")
+    return out
+
+
+def import_rosters(db: Session, league: League, rosters: dict[str, list[RosterEntry]]) -> dict:
+    """Make every roster match ESPN, including IR, and set the current week's
+    lineup from ESPN's slots."""
+    from sqlalchemy import delete
+    from . import config
+    from .models import WaiverClaim, WaiverHold
+    from .weeks import current_week, total_weeks
+    if league.status not in ("season", "playoffs"):
+        raise LeagueError("Import the draft (or run it) before importing rosters.")
+    teams = {t.name: t for t in db.scalars(select(Team))}
+    missing = sorted(set(teams) - set(rosters))
+    if missing:
+        raise LeagueError(f"Rosters page is missing: {', '.join(missing)}")
+    by_name: dict[str, list[Player]] = {}
+    for pl in db.scalars(select(Player)):
+        by_name.setdefault(norm_name(pl.name), []).append(pl)
+    seen, placeholders = set(), []
+    for tname, entries in rosters.items():
+        active = [e for e in entries if e.slot != "IR"]
+        if len(active) > config.ROSTER_MAX or len(entries) - len(active) > config.IR_SLOTS:
+            raise LeagueError(f"{tname} has more players than the roster allows.")
+    db.execute(delete(RosterSpot))
+    db.execute(delete(LineupSlot))
+    db.execute(delete(WaiverClaim).where(WaiverClaim.status == "pending"))
+    db.execute(delete(WaiverHold))
+    week = current_week(league)
+    now = utcnow()
+    lineups_set = 0
+    for tname, entries in rosters.items():
+        team = teams[tname]
+        slot_idx: dict[int, int] = {}
+        free = {s: [i for i, x in enumerate(config.STARTER_SLOTS) if x == s] for s in set(config.STARTER_SLOTS)}
+        for e in entries:
+            pick = RecapPick(0, 0, e.name, e.nba_team, e.positions[0], tname)
+            player = find_player(db, pick, by_name)
+            if player.id in seen:
+                raise LeagueError(f"{e.name} is on two rosters.")
+            seen.add(player.id)
+            if player.id < 0:
+                placeholders.append(e.name)
+                player.positions = ",".join(e.positions)
+            if e.injury or player.id < 0:
+                player.injury = e.injury
+            db.add(RosterSpot(team_id=team.id, player_id=player.id, acquired_at=now, on_ir=e.slot == "IR"))
+            if free.get(e.slot):
+                slot_idx[free[e.slot].pop(0)] = player.id
+        db.flush()
+        if slot_idx and week <= total_weeks(league):
+            for i in range(len(config.STARTER_SLOTS)):
+                db.add(LineupSlot(team_id=team.id, week=week, slot_index=i, player_id=slot_idx.get(i)))
+            lineups_set += 1
+    db.flush()
+    log(db, "add", "Rosters imported from ESPN")
+    return {"players": len(seen), "placeholders": placeholders, "lineups": lineups_set, "week": week}
